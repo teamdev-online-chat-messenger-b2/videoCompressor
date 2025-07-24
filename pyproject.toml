@@ -1,13 +1,11 @@
-[project]
+[tool.poetry]
 name = "videocompressor"
 version = "0.1.0"
 description = ""
-authors = [
-    {name = "recursion-team"}
-]
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
+authors = ["recursion-team"]
+packages = [
+    { include = "client" },
+    { include = "server" }
 ]
 
 [build-system]
