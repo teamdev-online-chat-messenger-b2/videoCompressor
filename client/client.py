@@ -67,11 +67,17 @@ try:
 
         # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
         # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
-        header = protocol_header(len(req_params), len(mediatype), filesize)
+        req_params_size = len(json.dumps(req_params))
+        print(f'req param size is {req_params_size}')
+        header = protocol_header(req_params_size, len(mediatype), filesize)
         print(header)
 
         # ヘッダの送信
         sock.send(header)
+
+        # req_params(json)および、メディアタイプ(mp3など)の送信
+        sock.send(json.dumps(req_params).encode('utf-8'))
+        sock.send(mediatype.encode('utf-8'))
 
         # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
         data = f.read(stream_rate)

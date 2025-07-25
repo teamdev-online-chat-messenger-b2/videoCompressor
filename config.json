@@ -2,6 +2,6 @@
     "server_address": "127.0.0.1",
     "server_port": 9001,
     "max_storage": 4398046511104,
-    "storage_dir": "server/storage",
+    "storage_dir": "/server/storage",
     "stream_rate": 1400
 }

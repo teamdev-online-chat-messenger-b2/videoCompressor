@@ -29,8 +29,12 @@ while True:
         file_size = int.from_bytes(header[3:], 'big')
         print(json_size,mediatype_size, file_size)
 
+        req_params = connection.recv(json_size)
+        mediatype = connection.recv(mediatype_size)
+        print(f'request is {req_params}, media type is {mediatype}')
+
         # TODO : filenameはuuidを使って生成する
-        filename = 'test1'
+        filename = "b"
 
         # 次に、コードはクライアントから受け取ったファイル名で新しいファイルをフォルダに作成します。このファイルは、withステートメントを使用してバイナリモードで開かれ、write()関数を使用して、クライアントから受信したデータをファイルに書き込みます。データはrecv()関数を使用して塊単位で読み込まれ、データの塊を受信するたびにデータ長がデクリメントされます。
         # w+は終了しない場合はファイルを作成し、そうでない場合はデータを切り捨てます
