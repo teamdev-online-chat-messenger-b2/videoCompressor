@@ -85,6 +85,13 @@ try:
             print("Sending...")
             sock.send(data)
             data = f.read(stream_rate)
+        
+        err_response = sock.recv(4096)
+        if err_response:
+            response_json = err_response.decode('utf-8')
+            print("サーバーからのレスポンス:", response_json)
+        else:
+            print("成功")
 
 except FileNotFoundError as nofile_err:
     print('inputFile not found')

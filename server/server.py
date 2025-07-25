@@ -72,5 +72,9 @@ while True:
         error = ErrorInfo('1002', str(file_err), '解決しない場合は管理者にお問い合わせください。')
 
     finally:
+        if error is not None:
+            error_json = error.to_json()              
+            error_bytes = error_json.encode('utf-8')
+            connection.sendall(error_bytes)
         print("コネクションを閉じます")
         connection.close()
