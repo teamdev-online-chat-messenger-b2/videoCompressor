@@ -11,9 +11,9 @@ class ErrorInfo:
     
     def to_dict(self):
         return {
-            "error_code": self.error_code,
-            "description": self.description,
-            "solution": self.solution
+            'error_code': self.error_code,
+            'description': self.description,
+            'solution': self.solution
         }
     
     def to_json(self):
@@ -48,7 +48,7 @@ def main():
             req_params = connection.recv(json_size).decode('utf-8')
             mediatype = connection.recv(mediatype_size).decode('utf-8')
 
-            filename = f"{uuid.uuid4().hex}.{mediatype}"
+            filename = f'{uuid.uuid4().hex}.{mediatype}'
 
             # 次に、コードはクライアントから受け取ったファイル名で新しいファイルをフォルダに作成します。このファイルは、withステートメントを使用してバイナリモードで開かれ、write()関数を使用して、クライアントから受信したデータをファイルに書き込みます。データはrecv()関数を使用して塊単位で読み込まれ、データの塊を受信するたびにデータ長がデクリメントされます。
             # w+は終了しない場合はファイルを作成し、そうでない場合はデータを切り捨てます
@@ -74,7 +74,7 @@ def main():
                 error_json = error.to_json()              
                 error_bytes = error_json.encode('utf-8')
                 connection.sendall(error_bytes)
-            print("コネクションを閉じます")
+            print('コネクションを閉じます')
             connection.close()
 
 if __name__ == '__main__':
