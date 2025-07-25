@@ -32,73 +32,77 @@ def get_user_choice(menu):
         except ValueError:
             print("正しい数字を入力してください")
 
-with open('config.json', 'r', encoding='utf-8') as f:
-    config = json.load(f)
-    server_address = config['server_address']
-    server_port = config['server_port']
-    stream_rate = config['stream_rate']
+def main():
+    with open('config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+        server_address = config['server_address']
+        server_port = config['server_port']
+        stream_rate = config['stream_rate']
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-print('connecting to {}'.format(server_address, server_port))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    print('connecting to {}'.format(server_address, server_port))
 
-try:
-    sock.connect((server_address, server_port))
-except socket.error as err:
-    print(err)
-    sys.exit(1)
+    try:
+        sock.connect((server_address, server_port))
+    except socket.error as err:
+        print(err)
+        sys.exit(1)
 
-try:
-    filepath = input('Input filePath to upload\n')
-    mediatype = filepath.split('.')[-1]
+    try:
+        filepath = input('Input filePath to upload\n')
+        mediatype = filepath.split('.')[-1]
 
-    menu = show_menu()
-    action = get_user_choice(menu)
-    req_params = {'action':action}
+        menu = show_menu()
+        action = get_user_choice(menu)
+        req_params = {'action':action}
 
-    # バイナリモードでファイルを読み込む
-    with open(filepath, 'rb') as f:
-        # ファイルの末尾に移動し、tellは開いているファイルの現在位置を返します。ファイルのサイズを取得するために使用します
-        f.seek(0, os.SEEK_END)
-        filesize = f.tell()
-        f.seek(0,0)
+        # バイナリモードでファイルを読み込む
+        with open(filepath, 'rb') as f:
+            # ファイルの末尾に移動し、tellは開いているファイルの現在位置を返します。ファイルのサイズを取得するために使用します
+            f.seek(0, os.SEEK_END)
+            filesize = f.tell()
+            f.seek(0,0)
 
-        if filesize > pow(2,40):
-            raise Exception('file have to be below 1TB')
+            if filesize > pow(2,40):
+                raise Exception('file have to be below 1TB')
 
-        # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
-        # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
-        req_params_size = len(json.dumps(req_params))
-        print(f'req param size is {req_params_size}')
-        header = protocol_header(req_params_size, len(mediatype), filesize)
-        print(header)
+            # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
+            # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
+            req_params_size = len(json.dumps(req_params))
+            print(f'req param size is {req_params_size}')
+            header = protocol_header(req_params_size, len(mediatype), filesize)
+            print(header)
 
-        # ヘッダの送信
-        sock.send(header)
+            # ヘッダの送信
+            sock.send(header)
 
-        # req_params(json)および、メディアタイプ(mp3など)の送信
-        sock.send(json.dumps(req_params).encode('utf-8'))
-        sock.send(mediatype.encode('utf-8'))
+            # req_params(json)および、メディアタイプ(mp3など)の送信
+            sock.send(json.dumps(req_params).encode('utf-8'))
+            sock.send(mediatype.encode('utf-8'))
 
-        # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
-        data = f.read(stream_rate)
-        while data:
-            print("Sending...")
-            sock.send(data)
+            # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
             data = f.read(stream_rate)
-        
-        err_response = sock.recv(4096)
-        if err_response:
-            response_json = err_response.decode('utf-8')
-            print("サーバーからのレスポンス:", response_json)
-        else:
-            print("成功")
+            while data:
+                print("Sending...")
+                sock.send(data)
+                data = f.read(stream_rate)
+            
+            err_response = sock.recv(4096)
+            if err_response:
+                response_json = err_response.decode('utf-8')
+                print("サーバーからのレスポンス:", response_json)
+            else:
+                print("成功")
 
-except FileNotFoundError as nofile_err:
-    print('inputFile not found')
+    except FileNotFoundError as nofile_err:
+        print('inputFile not found')
 
-except Exception as e:
-    print('Error: ' + str(e))
+    except Exception as e:
+        print('Error: ' + str(e))
 
-finally:
-    print('closing socket')
-    sock.close()
+    finally:
+        print('closing socket')
+        sock.close()
+
+if __name__ == '__main__':
+    main()
