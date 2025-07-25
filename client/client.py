@@ -38,9 +38,8 @@ def main():
         server_address = config['server_address']
         server_port = config['server_port']
         stream_rate = config['stream_rate']
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print('connecting to {}'.format(server_address, server_port))
+    print("サーバーに接続します。")
 
     try:
         sock.connect((server_address, server_port))
@@ -49,7 +48,7 @@ def main():
         sys.exit(1)
 
     try:
-        filepath = input('Input filePath to upload\n')
+        filepath = input('処理対象の動画ファイルパスを入力してください\n')
         mediatype = filepath.split('.')[-1]
 
         menu = show_menu()
@@ -58,24 +57,19 @@ def main():
 
         # バイナリモードでファイルを読み込む
         with open(filepath, 'rb') as f:
-            # ファイルの末尾に移動し、tellは開いているファイルの現在位置を返します。ファイルのサイズを取得するために使用します
             f.seek(0, os.SEEK_END)
             filesize = f.tell()
             f.seek(0,0)
-
             if filesize > pow(2,40):
-                raise Exception('file have to be below 1TB')
+                raise Exception('処理対象の動画ファイルは1TB以下です。')
 
             # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
             # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
             req_params_size = len(json.dumps(req_params))
-            print(f'req param size is {req_params_size}')
             header = protocol_header(req_params_size, len(mediatype), filesize)
-            print(header)
 
             # ヘッダの送信
             sock.send(header)
-
             # req_params(json)および、メディアタイプ(mp3など)の送信
             sock.send(json.dumps(req_params).encode('utf-8'))
             sock.send(mediatype.encode('utf-8'))
@@ -95,13 +89,13 @@ def main():
                 print("成功")
 
     except FileNotFoundError as nofile_err:
-        print('inputFile not found')
+        print('処理対象の動画が見つかりません')
 
     except Exception as e:
-        print('Error: ' + str(e))
+        print('エラー: ' + str(e))
 
     finally:
-        print('closing socket')
+        print('ソケットを閉じます')
         sock.close()
 
 if __name__ == '__main__':

@@ -25,8 +25,6 @@ def main():
         server_address = config['server_address']
         server_port = config['server_port']
         max_storage = config['max_storage']
-        # server/server.py から見たプロジェクトルートの絶対パスを取得
-        # 必ず "videoCompressor/server/storage" になるようにパスを組み立てる
         BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         dir_path = BASE_DIR + config['storage_dir']
         stream_rate = config['stream_rate']
@@ -35,22 +33,20 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((server_address, server_port))
     sock.listen(1)
-    print('server is starting：waiting from clients')
+    print('サーバーが起動します。クライアントからの接続を待ちます。')
 
     while True:
         connection, client_address = sock.accept()
         error = None
         try:
-            print(f'connecting from client')
+            print('クライアントから接続します。。')
             header = connection.recv(8)
             json_size = int.from_bytes(header[:2], 'big')
             mediatype_size = int.from_bytes(header[2:3], 'big')
             file_size = int.from_bytes(header[3:], 'big')
-            print(json_size,mediatype_size, file_size)
 
             req_params = connection.recv(json_size).decode('utf-8')
             mediatype = connection.recv(mediatype_size).decode('utf-8')
-            print(f'request is {req_params}, media type is {mediatype}')
 
             filename = f"{uuid.uuid4().hex}.{mediatype}"
 
