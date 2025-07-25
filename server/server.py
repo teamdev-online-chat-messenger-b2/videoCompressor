@@ -3,6 +3,22 @@ import os
 import json
 import uuid
 
+class ErrorInfo:
+    def __init__(self,code, description, solution) -> None:
+        self.error_code = code
+        self.description = description
+        self.solution = solution
+    
+    def to_dict(self):
+        return {
+            "error_code": self.error_code,
+            "description": self.description,
+            "solution": self.solution
+        }
+    
+    def to_json(self):
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
     server_address = config['server_address']
@@ -48,16 +64,13 @@ while True:
                     file_size -= len(data)
                     print(file_size)
         except Exception as file_err:
-            state = 'error in upload'
-            print(f'error in uploading file :{file_err}')
+            error = ErrorInfo('1001', str(file_err), '解決しない場合は管理者にお問い合わせください。')
         else:
-            state = 'success'
-            print('Finished downloading the file from client.')
+            print('ファイルのアップロードが完了しました。')
 
     except Exception as e:
-        state = str(e)
-        print('Error: ' + state)
+        error = ErrorInfo('1002', str(file_err), '解決しない場合は管理者にお問い合わせください。')
 
     finally:
-        print("Closing current connection")
+        print("コネクションを閉じます")
         connection.close()
