@@ -13,11 +13,14 @@ def get_resolution_choice():
     print("-----------------------")
 
     while True:
-        user_choice = int(input("Select Resolution: "))
-        if user_choice in resolution_choices:
-            return resolution_choices[user_choice][1], resolution_choices[user_choice][2]
-        else:
-            print("Select from 1 to 5")
+        try:
+            user_choice = int(input("Select Resolution: "))
+            if user_choice in resolution_choices:
+                return resolution_choices[user_choice][1], resolution_choices[user_choice][2]
+            else:
+                print("Select from 1 to 5")
+        except ValueError:
+            print("Type a valid number")
 
 def main():
     # call get_resolution_choice in the main logic
