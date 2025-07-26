@@ -21,13 +21,3 @@ def get_resolution_choice():
                 print("１から５の中から選んでください")
         except ValueError:
             print("正しい数字を入力してください")
-
-def main():
-    # call get_resolution_choice in the main logic
-    # if action == 2:
-    #     width, height = get_resolution_choice()
-    #     req_params = {
-    #         'action': action,
-    #         'width': width,
-    #         'height': height
-    #     }
