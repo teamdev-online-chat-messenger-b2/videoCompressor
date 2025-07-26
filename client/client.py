@@ -19,7 +19,6 @@ class CheckBeforeSend():
             print('空のファイルです。')
             sys.exit(1)
 
-
 def protocol_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
 
@@ -31,7 +30,6 @@ def show_menu():
         4: '動画をオーディオに変換',
         5: '時間範囲での GIF と WEBM の作成'
     }
-
     print('=== 動画処理メニュー ===')
     for key, value in menu.items():
         print(f'{key} {value}')
@@ -65,11 +63,12 @@ def get_resolution_choice():
 
     while True:
         try:
-            user_choice = int(input("お望みの解像度を選択してください: "))
+            user_choice = int(input("解像度を選択してください: "))
             if user_choice in resolution_choices:
-                return resolution_choices[user_choice][1], resolution_choices[user_choice][2]
+                return resolution_choices[user_choice][0]
             else:
-                print("１から５の中から選んでください")
+                print("１から５の中から選択してください")
+
         except ValueError:
             print("正しい数字を入力してください")
 
@@ -91,19 +90,39 @@ def main():
     try:
         filepath = input('処理対象の動画ファイルパスを入力してください\n')
         CheckBeforeSend.check_file_exists(filepath)
-
         mediatype = filepath.split('.')[-1]
 
         menu = show_menu()
         action = get_user_choice(menu)
-        req_params = {'action':action}
+
+        match action:
+            case 1:
+                #動画ファイルの圧縮
+                req_params = {'action': action}
+            case 2:
+                #動画の解像度の変更
+                chosen_resolution = get_resolution_choice()
+                req_params = {
+                    'action': action,
+                    'resolution': chosen_resolution
+                }
+            case 3:
+                #動画のアスペクト比の変更
+                req_params = {'action': action}
+            case 4:
+                #動画をオーディオに変換
+                req_params = {'action': action}
+            case 5:
+                #時間範囲での GIF と WEBM の作成
+                req_params = {'action': action}
+            case _:
+                req_params = {'action': action}
 
         # バイナリモードでファイルを読み込む
         with open(filepath, 'rb') as f:
             f.seek(0, os.SEEK_END)
             filesize = f.tell()
             f.seek(0,0)
-
             CheckBeforeSend.check_file_size(filesize)
 
             # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
@@ -127,7 +146,6 @@ def main():
 
             except Exception as e:
                 print('エラー: ' + str(e))
-
             finally:
                 err_response = sock.recv(4096)
                 if err_response:
