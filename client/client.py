@@ -3,6 +3,23 @@ import sys
 import os
 import json
 
+class CheckBeforeSend():
+    @staticmethod
+    def check_file_exists(filepath):
+        if not os.path.exists(filepath):
+            print('ファイルが存在しません')
+            sys.exit(1)
+
+    @staticmethod
+    def check_file_size(filesize):
+        if filesize > pow(2,40):
+            print('処理対象の動画ファイルは1TB以下です。')
+            sys.exit(1)
+        if filesize == 0:
+            print('空のファイルです。')
+            sys.exit(1)
+        
+    
 def protocol_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
 
@@ -49,10 +66,7 @@ def main():
 
     try:
         filepath = input('処理対象の動画ファイルパスを入力してください\n')
-        
-        # ファイル存在チェックを先に行う
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f'ファイルが見つかりません: {filepath}')
+        CheckBeforeSend.check_file_exists(filepath)
             
         mediatype = filepath.split('.')[-1]
 
@@ -65,39 +79,43 @@ def main():
             f.seek(0, os.SEEK_END)
             filesize = f.tell()
             f.seek(0,0)
-            if filesize > pow(2,40):
-                raise Exception('処理対象の動画ファイルは1TB以下です。')
+            
+            CheckBeforeSend.check_file_size(filesize)
 
             # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
             # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
             req_params_size = len(json.dumps(req_params))
             header = protocol_header(req_params_size, len(mediatype), filesize)
 
-            # ヘッダの送信
-            sock.send(header)
-            # req_params(json)および、メディアタイプ(mp3など)の送信
-            sock.send(json.dumps(req_params).encode('utf-8'))
-            sock.send(mediatype.encode('utf-8'))
+            # serverへのデータ送信および、serverからのレスポンスは内側のtry-catchで制御
+            try:
+                # ヘッダの送信
+                sock.send(header)
+                # req_params(json)および、メディアタイプ(mp3など)の送信
+                sock.send(json.dumps(req_params).encode('utf-8'))
+                sock.send(mediatype.encode('utf-8'))
 
-            # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
-            data = f.read(stream_rate)
-            while data:
-                sock.send(data)
+                # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
                 data = f.read(stream_rate)
+                while data:
+                    sock.send(data)
+                    data = f.read(stream_rate)
 
-    except FileNotFoundError as nofile_err:
-        print('処理対象の動画が見つかりません' + str(nofile_err))
-
+            except Exception as e:
+                print('エラー: ' + str(e))
+            
+            finally:
+                err_response = sock.recv(4096)
+                if err_response:
+                    response_json = err_response.decode('utf-8')
+                    print(f'サーバーからのレスポンス:{response_json}')
+                else:
+                    print('成功')
+                
     except Exception as e:
         print('エラー: ' + str(e))
 
     finally:
-        err_response = sock.recv(4096)
-        if err_response:
-            response_json = err_response.decode('utf-8')
-            print('サーバーからのレスポンス:', response_json)
-        else:
-            print('成功')
         print('ソケットを閉じます')
         sock.close()
 
