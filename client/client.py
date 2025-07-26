@@ -8,8 +8,8 @@ def get_resolution_choice():
     }
 
     print("---Resolution Choises---")
-    for choice, (resolution_name, height, width) in resolution_choices.items():
-        print(f"{choice}. {resolution_name} ({height} by {width})")
+    for choice, (resolution_name, width, height) in resolution_choices.items():
+        print(f"{choice}. {resolution_name} ({width} by {height})")
     print("-----------------------")
 
     while True:
