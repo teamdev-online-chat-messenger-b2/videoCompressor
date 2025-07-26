@@ -7,20 +7,20 @@ def get_resolution_choice():
         5: ("4K", 3840, 2160)
     }
 
-    print("---Resolution Choises---")
+    print("-------解像度リスト-------")
     for choice, (resolution_name, width, height) in resolution_choices.items():
-        print(f"{choice}. {resolution_name} ({width} by {height})")
-    print("-----------------------")
+        print(f"{choice}. {resolution_name} ({width} * {height})")
+    print("------------------------")
 
     while True:
         try:
-            user_choice = int(input("Select Resolution: "))
+            user_choice = int(input("お望みの解像度を選択してください: "))
             if user_choice in resolution_choices:
                 return resolution_choices[user_choice][1], resolution_choices[user_choice][2]
             else:
-                print("Select from 1 to 5")
+                print("１から５の中から選んでください")
         except ValueError:
-            print("Type a valid number")
+            print("正しい数字を入力してください")
 
 def main():
     # call get_resolution_choice in the main logic
