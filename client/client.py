@@ -49,6 +49,11 @@ def main():
 
     try:
         filepath = input('処理対象の動画ファイルパスを入力してください\n')
+        
+        # ファイル存在チェックを先に行う
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f'ファイルが見つかりません: {filepath}')
+            
         mediatype = filepath.split('.')[-1]
 
         menu = show_menu()
@@ -89,7 +94,7 @@ def main():
                 print('成功')
 
     except FileNotFoundError as nofile_err:
-        print('処理対象の動画が見つかりません')
+        print('処理対象の動画が見つかりません' + str(nofile_err))
 
     except Exception as e:
         print('エラー: ' + str(e))

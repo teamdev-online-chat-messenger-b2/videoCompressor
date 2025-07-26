@@ -50,6 +50,10 @@ def main():
 
             filename = f'{uuid.uuid4().hex}.{mediatype}'
 
+            # ファイルサイズが0の場合はエラーとして扱う
+            if file_size <= 0:
+                raise Exception('ファイルサイズが無効です')
+
             try:
                 with open(os.path.join(dir_path, filename),'wb+') as f:
                     # すべてのデータの読み書きが終了するまで、クライアントから読み込まれます
