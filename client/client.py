@@ -82,16 +82,8 @@ def main():
             # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
             data = f.read(stream_rate)
             while data:
-                print('Sending...')
                 sock.send(data)
                 data = f.read(stream_rate)
-            
-            err_response = sock.recv(4096)
-            if err_response:
-                response_json = err_response.decode('utf-8')
-                print('サーバーからのレスポンス:', response_json)
-            else:
-                print('成功')
 
     except FileNotFoundError as nofile_err:
         print('処理対象の動画が見つかりません' + str(nofile_err))
@@ -100,6 +92,12 @@ def main():
         print('エラー: ' + str(e))
 
     finally:
+        err_response = sock.recv(4096)
+        if err_response:
+            response_json = err_response.decode('utf-8')
+            print('サーバーからのレスポンス:', response_json)
+        else:
+            print('成功')
         print('ソケットを閉じます')
         sock.close()
 

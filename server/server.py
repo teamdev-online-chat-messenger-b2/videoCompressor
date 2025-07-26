@@ -60,16 +60,16 @@ def main():
                     while file_size > 0:
                         data = connection.recv(file_size if file_size <= stream_rate else stream_rate)
                         f.write(data)
-                        print('recieved {} bytes'.format(len(data)))
                         file_size -= len(data)
-                        print(file_size)
             except Exception as file_err:
-                error = ErrorInfo('1001', str(file_err), '解決しない場合は管理者にお問い合わせください。')
+                error = ErrorInfo('1001', 'ファイルアップロード中のエラー:' + str(file_err), '解決しない場合は管理者にお問い合わせください。')
+                print(str(file_err))
             else:
                 print('ファイルのアップロードが完了しました。')
 
         except Exception as e:
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')
+            print(str(e))
 
         finally:
             if error is not None:
