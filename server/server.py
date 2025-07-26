@@ -1,8 +1,8 @@
-import subprocess
 import socket
 import os
 import json
 import uuid
+import subprocess
 
 class ErrorInfo:
     def __init__(self,code, description, solution) -> None:
@@ -20,36 +20,37 @@ class ErrorInfo:
     def to_json(self):
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
-def handle_manipulate_change(original_filename, dir_path, req_params):
-    input_path = os.path.join(dir_path, original_filename)
+def handle_resolution_change(original_filename, dir_path, req_data):
+    chosen_resolution = req_data.get('resolution', 0)
 
+    input_path = os.path.join(dir_path, original_filename)
     base_name = original_filename.split('.')[0]
-    output_filename = f"{base_name}_processed.mp4"
+    output_filename = f"{base_name}_{chosen_resolution}.mp4"
     output_path = os.path.join(dir_path, output_filename)
 
-    # パラメーターから高さと横幅を抽出
-    width = req_params['width']
-    height = req_params['height']
+    resolution_choices = {
+        "480p": (854, 480),
+        "720p": (1280, 720),
+        "1080p": (1920, 1080),
+        "1440p": (2560, 1440),
+        "4K": (3840, 2160)
+    }
 
-    # FFMPEGによる解像度変換コマンド
     ffmpeg_cmd = [
         'ffmpeg',
         '-y',
         '-i', input_path,
-        '-vf', f'scale={width}:{height}',
+        '-vf', f'scale={resolution_choices[chosen_resolution][0]}:{resolution_choices[chosen_resolution][1]}',
         '-c:a', 'copy',
         '-preset', 'fast',
         output_path
     ]
 
-    print("FFMPEG実行中")
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
-    # SubprocessでFFMPEGコマンドを実行
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-
     if result.returncode != 0:
         raise Exception(f"FFMPEG エラー: {result.stderr}")
-
     return output_filename
 
 def main():
