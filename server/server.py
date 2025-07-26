@@ -101,6 +101,21 @@ def main():
             else:
                 print('ファイルのアップロードが完了しました。')
 
+                req_data = json.loads(req_params)
+                action = req_data.get('action', 0)
+
+                print(f"受信したアクション: {action}")
+
+                match action:
+                    case 2:
+                        try:
+                            processed_filename = handle_resolution_change(filename, dir_path, req_data)
+                            print(f'解像度変更完了: {processed_filename}')
+
+                        except Exception as process_err:
+                            error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
+                            print(f"処理エラー: {str(process_err)}")
+
         except Exception as e:
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')
             print(str(e))
