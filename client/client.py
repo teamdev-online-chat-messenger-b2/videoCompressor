@@ -48,6 +48,20 @@ def receive_response(sock):
 
         return 'success', file_data
 
+def save_processed_file(file_data):
+    output_filename = input('処理後の動画を保存するファイル名を入力してください\n')
+
+    if not output_filename.endswith('.mp4'):
+        output_filename += '.mp4'
+
+    if isinstance(file_data, bytes):
+        with open(output_filename, 'wb') as f:
+            f.write(file_data)
+
+        print("処理後の動画を保存完了！")
+    else:
+        print("保存不可なデータ形式")
+
 # メニューに関連した関数はここから実装
 def show_menu():
     menu = {
@@ -182,6 +196,7 @@ def main():
                     print(f"エラー：{response_body}")
                 else:
                     print("処理成功！")
+                    save_processed_file(response_body)
 
     except Exception as e:
         print('エラー: ' + str(e))
