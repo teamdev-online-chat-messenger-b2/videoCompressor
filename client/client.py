@@ -20,7 +20,7 @@ class CheckBeforeSend():
             print('空のファイルです。')
             sys.exit(1)
 
-def protocol_header(json_size, mediatype_size, payload_size):
+def create_request_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
 
 def receive_response(sock):
@@ -171,7 +171,7 @@ def main():
             # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
             # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
             req_params_size = len(json.dumps(req_params))
-            header = protocol_header(req_params_size, len(mediatype), filesize)
+            header = create_request_header(req_params_size, len(mediatype), filesize)
 
             # serverへのデータ送信および、serverからのレスポンスは内側のtry-catchで制御
             try:
