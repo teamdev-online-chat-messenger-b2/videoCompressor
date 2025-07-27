@@ -18,20 +18,18 @@ class CheckBeforeSend():
         if filesize == 0:
             print('空のファイルです。')
             sys.exit(1)
-        
-    
+
 def protocol_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
 
 def show_menu():
     menu = {
         1: '動画ファイルの圧縮',
-        2: '動画の解像度の変更', 
+        2: '動画の解像度の変更',
         3: '動画のアスペクト比の変更',
         4: '動画をオーディオに変換',
         5: '時間範囲での GIF と WEBM の作成'
     }
-    
     print('=== 動画処理メニュー ===')
     for key, value in menu.items():
         print(f'{key} {value}')
@@ -48,6 +46,31 @@ def get_user_choice(menu):
                 print('メニュー内の数字を入力して下さい')
         except ValueError:
             print('正しい数字を入力してください')
+
+def get_resolution_choice():
+    resolution_choices = {
+        1: ("480p", 854, 480),
+        2: ("720p", 1280, 720),
+        3: ("1080p", 1920, 1080),
+        4: ("1440p", 2560, 1440),
+        5: ("4K", 3840, 2160)
+    }
+
+    print("-------解像度リスト-------")
+    for choice, (resolution_name, width, height) in resolution_choices.items():
+        print(f"{choice}. {resolution_name} ({width} * {height})")
+    print("------------------------")
+
+    while True:
+        try:
+            user_choice = int(input("解像度を選択してください: "))
+            if user_choice in resolution_choices:
+                return resolution_choices[user_choice][0]
+            else:
+                print("１から５の中から選択してください")
+
+        except ValueError:
+            print("正しい数字を入力してください")
 
 def main():
     with open('config.json', 'r', encoding='utf-8') as f:
@@ -67,19 +90,39 @@ def main():
     try:
         filepath = input('処理対象の動画ファイルパスを入力してください\n')
         CheckBeforeSend.check_file_exists(filepath)
-            
         mediatype = filepath.split('.')[-1]
 
         menu = show_menu()
         action = get_user_choice(menu)
-        req_params = {'action':action}
+
+        match action:
+            case 1:
+                #動画ファイルの圧縮
+                req_params = {'action': action}
+            case 2:
+                #動画の解像度の変更
+                chosen_resolution = get_resolution_choice()
+                req_params = {
+                    'action': action,
+                    'resolution': chosen_resolution
+                }
+            case 3:
+                #動画のアスペクト比の変更
+                req_params = {'action': action}
+            case 4:
+                #動画をオーディオに変換
+                req_params = {'action': action}
+            case 5:
+                #時間範囲での GIF と WEBM の作成
+                req_params = {'action': action}
+            case _:
+                req_params = {'action': action}
 
         # バイナリモードでファイルを読み込む
         with open(filepath, 'rb') as f:
             f.seek(0, os.SEEK_END)
             filesize = f.tell()
             f.seek(0,0)
-            
             CheckBeforeSend.check_file_size(filesize)
 
             # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
@@ -103,7 +146,6 @@ def main():
 
             except Exception as e:
                 print('エラー: ' + str(e))
-            
             finally:
                 err_response = sock.recv(4096)
                 if err_response:
@@ -111,7 +153,7 @@ def main():
                     print(f'サーバーからのレスポンス:{response_json}')
                 else:
                     print('成功')
-                
+
     except Exception as e:
         print('エラー: ' + str(e))
 

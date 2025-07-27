@@ -2,22 +2,56 @@ import socket
 import os
 import json
 import uuid
+import subprocess
 
 class ErrorInfo:
     def __init__(self,code, description, solution) -> None:
         self.error_code = code
         self.description = description
         self.solution = solution
-    
+
     def to_dict(self):
         return {
             'error_code': self.error_code,
             'description': self.description,
             'solution': self.solution
         }
-    
+
     def to_json(self):
         return json.dumps(self.to_dict(), ensure_ascii=False)
+
+def handle_resolution_change(input_filename, dir_path, req_data):
+    chosen_resolution = req_data.get('resolution', 0)
+
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
+    output_filename = f"{base_name}_{chosen_resolution}.mp4"
+    output_path = os.path.join(dir_path, output_filename)
+
+    resolution_choices = {
+        "480p": (854, 480),
+        "720p": (1280, 720),
+        "1080p": (1920, 1080),
+        "1440p": (2560, 1440),
+        "4K": (3840, 2160)
+    }
+
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', input_path,
+        '-vf', f'scale={resolution_choices[chosen_resolution][0]}:{resolution_choices[chosen_resolution][1]}',
+        '-c:a', 'copy',
+        '-preset', 'fast',
+        output_path
+    ]
+
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
+
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise Exception(f"FFMPEG エラー: {result.stderr}")
+    return output_filename
 
 def main():
     with open('config.json', 'r', encoding='utf-8') as f:
@@ -67,13 +101,28 @@ def main():
             else:
                 print('ファイルのアップロードが完了しました。')
 
+                req_data = json.loads(req_params)
+                action = req_data.get('action', 0)
+
+                print(f"受信したアクション: {action}")
+
+                match action:
+                    case 2:
+                        try:
+                            processed_filename = handle_resolution_change(filename, dir_path, req_data)
+                            print(f'解像度変更完了: {processed_filename}')
+
+                        except Exception as process_err:
+                            error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
+                            print(f"処理エラー: {str(process_err)}")
+
         except Exception as e:
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')
             print(str(e))
 
         finally:
             if error is not None:
-                error_json = error.to_json()              
+                error_json = error.to_json()
                 error_bytes = error_json.encode('utf-8')
                 connection.sendall(error_bytes)
             print('コネクションを閉じます')
