@@ -54,12 +54,13 @@ def send_response(connection, filepath, stream_rate):
 def send_error_response(connection, error_info):
     # エラーレスポンスをクライアントに返す関数
     try:
-        # エラーコード：０とエラーJSON（ErrorInfoオブジェクト）
+        # エラーコード：０（１バイト）とエラーJSON（ErrorInfoオブジェクト）
         error_header = b'\x00'
         error_json = error_info.to_json()
         error_bytes = error_json.encode('utf-8')
 
         connection.send(error_header)
+        connection.send(len(error_bytes).to_bytes(4, 'big'))
         connection.sendall(error_bytes)
 
         print(f"エラーレスポンス送信: {error_info.error_code}")
@@ -159,6 +160,7 @@ def main():
                         try:
                             processed_filename, output_path = handle_resolution_change(filename, dir_path, req_data)
                             print(f'解像度変更完了: {processed_filename}')
+                            send_response(connection, output_path, stream_rate)
 
                         except Exception as process_err:
                             error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
