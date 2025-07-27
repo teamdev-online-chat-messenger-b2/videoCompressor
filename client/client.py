@@ -3,7 +3,6 @@ import sys
 import os
 import json
 
-# 共通のコネククション関連の関数はここから実装
 class CheckBeforeSend():
     @staticmethod
     def check_file_exists(filepath):
@@ -20,8 +19,108 @@ class CheckBeforeSend():
             print('空のファイルです。')
             sys.exit(1)
 
+# 共通のコネククション関連の関数はここから実装
+def connect_to_server(config):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    try:
+        sock.connect((config['server_address'], config['server_port']))
+        print('サーバーに接続しました。')
+        return sock
+
+    except socket.error as err:
+        print(err)
+        sys.exit(1)
+
+def get_file_input():
+    filepath = input('処理対象の動画ファイルパスを入力してください：')
+    CheckBeforeSend.check_file_exists(filepath)
+
+    return filepath
+
+def get_request_parameters():
+    menu = show_menu()
+    action = get_user_choice(menu)
+
+    match action:
+        case 1:
+            #動画ファイルの圧縮
+            req_params = {'action': action}
+        case 2:
+            #動画の解像度の変更
+            chosen_resolution = get_resolution_choice()
+            req_params = {
+                'action': action,
+                'resolution': chosen_resolution
+            }
+        case 3:
+            #動画のアスペクト比の変更
+            req_params = {'action': action}
+        case 4:
+            #動画をオーディオに変換
+            req_params = {'action': action}
+        case 5:
+            #時間範囲での GIF と WEBM の作成
+            req_params = {'action': action}
+        case _:
+            req_params = {'action': action}
+
+    return req_params
+
 def create_request_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
+
+def send_file_data(config, sock, filepath, req_params):
+    mediatype = filepath.split('.')[-1]
+
+    # バイナリモードでファイルを読み込む
+    with open(filepath, 'rb') as f:
+        f.seek(0, os.SEEK_END)
+        filesize = f.tell()
+        f.seek(0, 0)
+        CheckBeforeSend.check_file_size(filesize)
+
+        # create_request_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
+        # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
+        req_params_size = len(json.dumps(req_params))
+        header = create_request_header(req_params_size, len(mediatype), filesize)
+
+        # ヘッダの送信
+        sock.send(header)
+        # req_params(json)および、メディアタイプ(mp3など)の送信
+        sock.send(json.dumps(req_params).encode('utf-8'))
+        sock.send(mediatype.encode('utf-8'))
+
+        # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
+        while True:
+            data = f.read(config['stream_rate'])
+            if not data:
+                break
+            sock.send(data)
+
+        print("ファイル送信完了")
+
+def upload_file(config, sock):
+    filepath = get_file_input()
+    req_params = get_request_parameters()
+
+    try:
+        send_file_data(config, sock, filepath, req_params)
+
+        try:
+            status, response_body = receive_response(sock)
+
+            if status == 'error':
+                print(f"サーバーエラー：{response_body}")
+            else:
+                print("処理成功！")
+                save_processed_file(response_body)
+
+        except Exception as recv_error:
+            print(f"レスポンス受信エラー: {str(recv_error)}")
+
+    except Exception as e:
+        print(f'ファイル送信エラー: {str(e)}')
 
 def receive_response(sock):
     responce_code = sock.recv(1)
@@ -71,22 +170,37 @@ def show_menu():
         4: '動画をオーディオに変換',
         5: '時間範囲での GIF と WEBM の作成'
     }
-    print('=== 動画処理メニュー ===')
+
+    print('------動画処理メニュー------')
     for key, value in menu.items():
         print(f'{key} {value}')
-    print('========================')
+    print("-------------------------")
+
     return menu
 
 def get_user_choice(menu):
     while True:
         try:
             action = int(input('メニューから処理を選択してください: '))
+
             if action in menu:
                 return action
             else:
                 print('メニュー内の数字を入力して下さい')
+
         except ValueError:
             print('正しい数字を入力してください')
+
+# その他必要な関数はここから実装
+def load_client_config():
+    with open('config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+
+    return {
+        'server_address': config['server_address'],
+        'server_port': config['server_port'],
+        'stream_rate': config['stream_rate']
+    }
 
 # 機能別の関数はここから実装
 def get_resolution_choice():
@@ -115,91 +229,15 @@ def get_resolution_choice():
             print("正しい数字を入力してください")
 
 def main():
-    with open('config.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-        server_address = config['server_address']
-        server_port = config['server_port']
-        stream_rate = config['stream_rate']
+    config = load_client_config()
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    print('サーバーに接続します。')
+    sock = connect_to_server(config)
 
     try:
-        sock.connect((server_address, server_port))
-    except socket.error as err:
-        print(err)
-        sys.exit(1)
+        upload_file(config, sock)
 
-    try:
-        filepath = input('処理対象の動画ファイルパスを入力してください\n')
-        CheckBeforeSend.check_file_exists(filepath)
-        mediatype = filepath.split('.')[-1]
-
-        menu = show_menu()
-        action = get_user_choice(menu)
-
-        match action:
-            case 1:
-                #動画ファイルの圧縮
-                req_params = {'action': action}
-            case 2:
-                #動画の解像度の変更
-                chosen_resolution = get_resolution_choice()
-                req_params = {
-                    'action': action,
-                    'resolution': chosen_resolution
-                }
-            case 3:
-                #動画のアスペクト比の変更
-                req_params = {'action': action}
-            case 4:
-                #動画をオーディオに変換
-                req_params = {'action': action}
-            case 5:
-                #時間範囲での GIF と WEBM の作成
-                req_params = {'action': action}
-            case _:
-                req_params = {'action': action}
-
-        # バイナリモードでファイルを読み込む
-        with open(filepath, 'rb') as f:
-            f.seek(0, os.SEEK_END)
-            filesize = f.tell()
-            f.seek(0,0)
-            CheckBeforeSend.check_file_size(filesize)
-
-            # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
-            # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
-            req_params_size = len(json.dumps(req_params))
-            header = create_request_header(req_params_size, len(mediatype), filesize)
-
-            # serverへのデータ送信および、serverからのレスポンスは内側のtry-catchで制御
-            try:
-                # ヘッダの送信
-                sock.send(header)
-                # req_params(json)および、メディアタイプ(mp3など)の送信
-                sock.send(json.dumps(req_params).encode('utf-8'))
-                sock.send(mediatype.encode('utf-8'))
-
-                # 一度に1400バイトずつ読み出し、送信することにより、ファイルを送信します。Readは読み込んだビットを返します
-                data = f.read(stream_rate)
-                while data:
-                    sock.send(data)
-                    data = f.read(stream_rate)
-
-            except Exception as e:
-                print('エラー: ' + str(e))
-
-            finally:
-                status, response_body = receive_response(sock)
-                if status == 'error':
-                    print(f"エラー：{response_body}")
-                else:
-                    print("処理成功！")
-                    save_processed_file(response_body)
-
-    except Exception as e:
-        print('エラー: ' + str(e))
+    except Exception as error:
+        print('エラー: ' + str(error))
 
     finally:
         print('ソケットを閉じます')
