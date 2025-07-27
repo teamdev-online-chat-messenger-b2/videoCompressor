@@ -84,6 +84,9 @@ def main():
 
             filename = f'{uuid.uuid4().hex}.{mediatype}'
 
+            # TODO : delete print
+            print(f'req is {req_params}')
+
             # ファイルサイズが0の場合はエラーとして扱う
             if file_size <= 0:
                 raise Exception('ファイルサイズが無効です')
