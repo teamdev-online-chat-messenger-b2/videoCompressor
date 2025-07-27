@@ -20,11 +20,11 @@ class ErrorInfo:
     def to_json(self):
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
-def handle_resolution_change(original_filename, dir_path, req_data):
+def handle_resolution_change(input_filename, dir_path, req_data):
     chosen_resolution = req_data.get('resolution', 0)
 
-    input_path = os.path.join(dir_path, original_filename)
-    base_name = original_filename.split('.')[0]
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
     output_filename = f"{base_name}_{chosen_resolution}.mp4"
     output_path = os.path.join(dir_path, output_filename)
 
