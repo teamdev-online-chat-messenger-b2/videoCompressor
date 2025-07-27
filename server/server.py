@@ -34,7 +34,7 @@ def send_response(connection, filepath, stream_rate):
             size_header = file_size.to_bytes(8, 'big')
             connection.send(success_header + size_header)
 
-            print(f"処理済みファイルを送信中... サイズ: {file_size} bytes")
+            print(f"処理済みファイル（{file_size}バイト）を送信中")
 
             # ファイルをstream_rateサイズに分割して送る
             total_sent = 0
@@ -44,9 +44,9 @@ def send_response(connection, filepath, stream_rate):
                     break
                 connection.send(data)
                 total_sent += len(data)
-                print(f"送信済み: {total_sent}/{file_size} bytes")
 
             print("処理済みファイルの送信完了")
+
     except Exception as e:
         print(f"ファイル送信エラー: {str(e)}")
         send_error_response(connection, ErrorInfo('1004', f'ファイル送信エラー: {str(e)}', 'ネットワーク接続を確認してください。'))
