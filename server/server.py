@@ -127,7 +127,7 @@ def handle_aspect_change(input_filename, dir_path, req_data):
     if result.returncode != 0:
         raise Exception(f"FFMPEG エラー: {result.stderr}")
 
-    return output_filename
+    return output_filename, output_path
 
 
 def main():
@@ -199,8 +199,9 @@ def main():
 
                     case 3:
                         try:
-                            processed_filename = handle_aspect_change(filename, dir_path, req_data)
+                            processed_filename, output_path = handle_aspect_change(filename, dir_path, req_data)
                             print(f'アスペクト比変更完了: {processed_filename}')
+                            send_response(connection, output_path, stream_rate)
                         except Exception as process_err:
                             error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
                             print(f"処理エラー: {str(process_err)}")
