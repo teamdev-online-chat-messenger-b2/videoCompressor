@@ -117,7 +117,7 @@ def handle_aspect_change(input_filename, dir_path, req_data):
         '-aspect', chosen_aspect_ratio,  # アスペクト比を設定
         '-c:v', 'libx264',              # 動画コーデック
         '-c:a', 'copy',                 # 音声はコピー
-        '-preset', 'fast',
+        '-preset', 'ultrafast', 
         output_path
     ]
 
