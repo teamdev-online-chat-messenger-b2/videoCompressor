@@ -53,6 +53,30 @@ def handle_resolution_change(input_filename, dir_path, req_data):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename
 
+def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
+    chosen_extension = req_data.get('extension')
+    startseconds = req_data.get('startseconds')
+    endseconds = req_data.get('endseconds')
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
+    output_filename = f"{base_name}.{chosen_extension}"
+    output_path = os.path.join(dir_path, output_filename)
+
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', input_path,
+        '-ss', str(startseconds),
+        '-to', str(endseconds),
+        output_path
+    ]
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
+
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
+    if result.returncode != 0:
+        raise Exception(f"FFMPEG エラー: {result.stderr}")
+    return output_filename
+
 def main():
     with open('config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
@@ -117,7 +141,14 @@ def main():
                             error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
                             print(f"処理エラー: {str(process_err)}")
                     case 5:
-                        pass
+                        # todo : 終了時刻 < 動画の長さの場合、例外を返す
+                        try:
+                            processed_filename = handle_process_video_clip(filename, dir_path, req_data)
+                            print(f'時間範囲での動画を作成完了: {processed_filename}')
+            
+                        except Exception as process_err:
+                            error = ErrorInfo('1006', f'動画処理中のエラー: {str(process_err)}', 'アップロードした動画を再度確認し、再度トライしてください。')
+                            print(f"処理エラー: {str(process_err)}")
 
         except Exception as e:
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')

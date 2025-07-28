@@ -109,7 +109,7 @@ def get_gif_webm_choice():
         try:
             user_choise = int(input('希望の形式を選んでください'))
             if user_choise in gif_webm_choices:
-                return gif_webm_choices[user_choise]
+                return gif_webm_choices[user_choise].lower()
             else:
                 print("正しい選択肢を選んでください")
         
@@ -160,7 +160,6 @@ def main():
             case 5:
                 startseconds, endseconds = get_start_end_seconds()
                 chosen_extension = get_gif_webm_choice()
-                #時間範囲での GIF と WEBM の作成
                 req_params = {
                     'action': action,
                     'startseconds': startseconds,
