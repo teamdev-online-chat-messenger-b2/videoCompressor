@@ -85,9 +85,10 @@ def get_start_end_seconds():
             startseconds = starttime_obj.hour * 3600 + starttime_obj.minute * 60 + starttime_obj.second
             endseconds = endtime_obj.hour * 3600 + endtime_obj.minute * 60 + endtime_obj.second
 
-            # todo : 開始 <= endであることを確認
-            
-            return startseconds, endseconds
+            if startseconds <= endseconds:
+                return startseconds, endseconds
+            else:
+                print("終了時刻は、開始時間より後にしてください")
 
         except ValueError:
             print("正しい数字を入力してください")
