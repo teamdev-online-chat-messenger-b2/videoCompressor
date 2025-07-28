@@ -125,7 +125,7 @@ def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
     if result.returncode != 0:
         raise Exception(f"FFMPEG エラー: {result.stderr}")
-    return output_filename
+    return output_filename, output_path
 
 def get_video_duration(dir_path:str, input_filename:str):
     input_path = os.path.join(dir_path, input_filename)
@@ -214,8 +214,9 @@ def main():
                             sys.exit(1)
 
                         try:
-                            processed_filename = handle_process_video_clip(filename, dir_path, req_data)
+                            processed_filename,output_path = handle_process_video_clip(filename, dir_path, req_data)
                             print(f'時間範囲での動画を作成完了: {processed_filename}')
+                            send_response(connection, output_path, stream_rate)
             
                         except Exception as process_err:
                             error = ErrorInfo('1006', f'動画処理中のエラー: {str(process_err)}', 'アップロードした動画を再度確認し、再度トライしてください。')

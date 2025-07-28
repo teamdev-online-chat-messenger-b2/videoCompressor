@@ -50,10 +50,7 @@ def receive_response(sock):
         return 'success', file_data
 
 def save_processed_file(file_data):
-    output_filename = input('処理後の動画を保存するファイル名を入力してください\n')
-
-    if not output_filename.endswith('.mp4'):
-        output_filename += '.mp4'
+    output_filename = input('処理後の動画を保存するファイル名(拡張子含む)を入力してください\n')
 
     if isinstance(file_data, bytes):
         with open(output_filename, 'wb') as f:
