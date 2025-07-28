@@ -2,3 +2,4 @@
 *.mp4
 .vscode
 /server/storage/
+server/__pycache__
