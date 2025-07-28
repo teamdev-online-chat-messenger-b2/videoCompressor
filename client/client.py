@@ -3,6 +3,7 @@ import sys
 import os
 import json
 
+# 共通のコネククション関連の関数はここから実装
 class CheckBeforeSend():
     @staticmethod
     def check_file_exists(filepath):
@@ -19,9 +20,49 @@ class CheckBeforeSend():
             print('空のファイルです。')
             sys.exit(1)
 
-def protocol_header(json_size, mediatype_size, payload_size):
+def create_request_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
 
+def receive_response(sock):
+    responce_code = sock.recv(1)
+    if responce_code == b'\x00':
+        # エラーの場合
+        error_size = int.from_bytes(sock.recv(4), 'big')
+
+        error_bytes = sock.recv(error_size)
+        error_text = error_bytes.decode('utf-8')
+
+        return 'error', error_text
+    else:
+        # 成功の場合
+        file_size = int.from_bytes(sock.recv(8), 'big')
+
+        file_data = b''
+        remaining = file_size
+        while remaining > 0:
+            chunk = sock.recv(min(1400, remaining))
+            if not chunk:
+                break
+            file_data += chunk
+            remaining -= len(chunk)
+
+        return 'success', file_data
+
+def save_processed_file(file_data):
+    output_filename = input('処理後の動画を保存するファイル名を入力してください\n')
+
+    if not output_filename.endswith('.mp4'):
+        output_filename += '.mp4'
+
+    if isinstance(file_data, bytes):
+        with open(output_filename, 'wb') as f:
+            f.write(file_data)
+
+        print("処理後の動画を保存完了！")
+    else:
+        print("保存不可なデータ形式")
+
+# メニューに関連した関数はここから実装
 def show_menu():
     menu = {
         1: '動画ファイルの圧縮',
@@ -47,6 +88,7 @@ def get_user_choice(menu):
         except ValueError:
             print('正しい数字を入力してください')
 
+# 機能別の関数はここから実装
 def get_resolution_choice():
     resolution_choices = {
         1: ("480p", 854, 480),
@@ -100,6 +142,7 @@ def main():
         server_address = config['server_address']
         server_port = config['server_port']
         stream_rate = config['stream_rate']
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     print('サーバーに接続します。')
 
@@ -154,7 +197,7 @@ def main():
             # protocol_header()関数を用いてヘッダ情報を作成し、ヘッダとファイル名をサーバに送信します。
             # JSONサイズ（2バイト）、メディアタイプサイズ（1バイト）、ペイロードサイズ（5バイト）
             req_params_size = len(json.dumps(req_params))
-            header = protocol_header(req_params_size, len(mediatype), filesize)
+            header = create_request_header(req_params_size, len(mediatype), filesize)
 
             # serverへのデータ送信および、serverからのレスポンスは内側のtry-catchで制御
             try:
@@ -172,13 +215,14 @@ def main():
 
             except Exception as e:
                 print('エラー: ' + str(e))
+
             finally:
-                err_response = sock.recv(4096)
-                if err_response:
-                    response_json = err_response.decode('utf-8')
-                    print(f'サーバーからのレスポンス:{response_json}')
+                status, response_body = receive_response(sock)
+                if status == 'error':
+                    print(f"エラー：{response_body}")
                 else:
-                    print('成功')
+                    print("処理成功！")
+                    save_processed_file(response_body)
 
     except Exception as e:
         print('エラー: ' + str(e))
