@@ -148,7 +148,7 @@ def main():
                     
                     case 3:
                         try:
-                            processed_filename = handle_resolution_change(filename, dir_path, req_data)
+                            processed_filename = handle_aspect_change(filename, dir_path, req_data)
                             print(f'解像度変更完了: {processed_filename}')
                         except Exception as process_err:
                             error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
