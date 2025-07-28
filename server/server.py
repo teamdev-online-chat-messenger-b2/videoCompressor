@@ -3,6 +3,7 @@ import os
 import json
 import uuid
 import subprocess
+import sys
 
 class ErrorInfo:
     def __init__(self,code, description, solution) -> None:
@@ -77,6 +78,20 @@ def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename
 
+def get_video_duration(dir_path:str, input_filename:str):
+    input_path = os.path.join(dir_path, input_filename)
+    cmd = [
+        'ffprobe',
+        '-v', 'quiet',
+        '-show_entries', 'format=duration',
+        '-of', 'csv=p=0',  # ヘッダーなしで数値のみ
+        input_path
+    ]
+    result = subprocess.run(cmd, capture_output=True)
+
+    return float(result.stdout)
+
+
 def main():
     with open('config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
@@ -141,7 +156,12 @@ def main():
                             error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
                             print(f"処理エラー: {str(process_err)}")
                     case 5:
-                        # todo : 終了時刻 < 動画の長さの場合、例外を返す
+                        duration_seconds = get_video_duration(dir_path,filename)
+                        if duration_seconds < req_data.get('endseconds'):
+                            error = ErrorInfo('1007', '指定した終了時刻が動画の長さを超えています', '指定範囲は動画の時間を超えない値で設定してください')
+                            print('指定した終了時刻が動画の長さを超えています。処理を終了します')
+                            sys.exit(1)
+
                         try:
                             processed_filename = handle_process_video_clip(filename, dir_path, req_data)
                             print(f'時間範囲での動画を作成完了: {processed_filename}')
