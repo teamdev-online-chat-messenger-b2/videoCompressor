@@ -105,6 +105,7 @@ def main():
                 action = req_data.get('action', 0)
 
                 print(f"受信したアクション: {action}")
+                print(f"リクエストは${req_data}")
 
                 match action:
                     case 2:
@@ -115,6 +116,8 @@ def main():
                         except Exception as process_err:
                             error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
                             print(f"処理エラー: {str(process_err)}")
+                    case 5:
+                        pass
 
         except Exception as e:
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')

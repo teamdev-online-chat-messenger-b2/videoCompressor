@@ -2,6 +2,7 @@ import socket
 import sys
 import os
 import json
+from datetime import datetime
 
 class CheckBeforeSend():
     @staticmethod
@@ -72,6 +73,49 @@ def get_resolution_choice():
         except ValueError:
             print("正しい数字を入力してください")
 
+def get_start_end_seconds():
+     
+     while True:
+        try:
+            # 切り取る開始時間~終了時間を取得する
+            starttime_str = input("開始時刻（HH:MM:SS）を入力してください: ")
+            starttime_obj = datetime.strptime(starttime_str, "%H:%M:%S")
+            endtime_str = input("終了時刻（HH:MM:SS）を入力してください: ")
+            endtime_obj = datetime.strptime(endtime_str, "%H:%M:%S")
+            startseconds = starttime_obj.hour * 3600 + starttime_obj.minute * 60 + starttime_obj.second
+            endseconds = endtime_obj.hour * 3600 + endtime_obj.minute * 60 + endtime_obj.second
+
+            # todo : 開始 <= endであることを確認
+            
+            return startseconds, endseconds
+
+        except ValueError:
+            print("正しい数字を入力してください")
+    
+def get_gif_webm_choice():
+    # GIFとWEBMの選択
+    gif_webm_choices = {
+        1: "GIF",
+        2: "WEBM"
+    }
+    print("-------以下の形式から選んで下さい-------")
+    for choice, extension in gif_webm_choices.items():
+        print(f"{choice}. {extension}")
+    print("------------------------")
+
+    while True:
+
+        try:
+            user_choise = int(input('希望の形式を選んでください'))
+            if user_choise in gif_webm_choices:
+                return gif_webm_choices[user_choise]
+            else:
+                print("正しい選択肢を選んでください")
+        
+        except ValueError:
+            print('正しい数字を入力してください')
+    
+
 def main():
     with open('config.json', 'r', encoding='utf-8') as f:
         config = json.load(f)
@@ -113,8 +157,16 @@ def main():
                 #動画をオーディオに変換
                 req_params = {'action': action}
             case 5:
+                startseconds, endseconds = get_start_end_seconds()
+                chosen_extension = get_gif_webm_choice()
                 #時間範囲での GIF と WEBM の作成
-                req_params = {'action': action}
+                req_params = {
+                    'action': action,
+                    'startseconds': startseconds,
+                    'endseconds': endseconds,
+                    'extension': chosen_extension
+                }
+                print(req_params)
             case _:
                 req_params = {'action': action}
 
