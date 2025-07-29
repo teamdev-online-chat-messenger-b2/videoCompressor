@@ -21,6 +21,110 @@ class ErrorInfo:
     def to_json(self):
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
+# コネクション関連の関数はここから実装
+def create_server_socket(config):
+    # アドレスファミリ : socket.AF_INET, 通信方式 : SOCK_STREAM = TCP通信（信頼性あり、順番保証、コネクション型）
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((config['server_address'], config['server_port']))
+    sock.listen(1)
+    print('サーバーが起動します。クライアントからの接続を待ちます。')
+    return sock
+
+# リクエストに関係する関数はここから実装
+def handle_client_request(config, connection):
+    # ヘッダー（８バイト）の中にある、JSONサイズ（２バイト）、メディアタイプ（１バイト）、ファイルサイズ（５バイト）
+    header = connection.recv(8)
+    json_size = int.from_bytes(header[:2], 'big')
+    mediatype_size = int.from_bytes(header[2:3], 'big')
+    file_size = int.from_bytes(header[3:], 'big')
+
+    # ファイルサイズが0の場合はエラーとして扱う
+    if file_size <= 0:
+        raise Exception('ファイルサイズが無効です')
+
+    req_params = connection.recv(json_size).decode('utf-8')
+    mediatype = connection.recv(mediatype_size).decode('utf-8')
+
+    filename = f'{uuid.uuid4().hex}.{mediatype}'
+
+    upload_error = store_uploaded_file(config, connection, filename, file_size)
+
+    if upload_error is not None:
+        return upload_error
+
+    req_data = json.loads(req_params)
+    action = req_data.get('action', 0)
+
+    print(f"受信したアクション: {action}")
+
+    match action:
+        case 1:
+            pass
+        case 2:
+            try:
+                processed_filename, output_path = handle_resolution_change(filename, config['dir_path'], req_data)
+                print(f'解像度変更完了: {processed_filename}')
+                error  = send_response(connection, output_path, config['stream_rate'])
+
+                if error is not None:
+                    return error
+
+            except Exception as process_err:
+                error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
+                print(f"解像度処理エラー: {str(process_err)}")
+                return error
+        case 3:
+            try:
+                processed_filename, output_path = handle_aspect_change(filename, config['dir_path'], req_data)
+                print(f'アスペクト比変更完了: {processed_filename}')
+                error = send_response(connection, output_path, config['stream_rate'])
+
+                if error is not None:
+                    return error
+
+            except Exception as process_err:
+                error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
+                print(f"処理エラー: {str(process_err)}")
+                return error
+        case 4:
+            pass
+        case 5:
+                duration_seconds = get_video_duration(config['dir_path'],filename)
+                if duration_seconds < req_data.get('endseconds'):
+                    error = ErrorInfo('1007', '指定した終了時刻が動画の長さを超えています', '指定範囲は動画の時間を超えない値で設定してください')
+                    print('指定した終了時刻が動画の長さを超えています。処理を終了します')
+                    sys.exit(1)
+
+                try:
+                    processed_filename,output_path = handle_process_video_clip(filename, config['dir_path'], req_data)
+                    print(f'時間範囲での動画を作成完了: {processed_filename}')
+                    send_response(connection, output_path, config['stream_rate'])
+
+                except Exception as process_err:
+                    error = ErrorInfo('1006', f'動画処理中のエラー: {str(process_err)}', 'アップロードした動画を再度確認し、再度トライしてください。')
+                    print(f"処理エラー: {str(process_err)}")
+
+def store_uploaded_file(config, connection, filename, file_size):
+    try:
+        with open(os.path.join(config['dir_path'], filename),'wb+') as f:
+            # すべてのデータの読み書きが終了するまで、クライアントから読み込まれます
+            while file_size > 0:
+                data = connection.recv(file_size if file_size <= config['stream_rate'] else config['stream_rate'])
+                f.write(data)
+                file_size -= len(data)
+
+        print('ファイルのアップロードが完了しました。')
+        return None
+
+    except Exception as file_err:
+        while file_size > 0:
+            data = connection.recv(file_size if file_size <= config['stream_rate'] else config['stream_rate'])
+            file_size -= len(data)
+
+        error = ErrorInfo('1001', 'ファイル保存中のエラー:' + str(file_err), '解決しない場合は管理者にお問い合わせください。')
+        return error
+
 # レスポンスに関係する関数はここから実装
 def send_response(connection, filepath, stream_rate):
     # 各処理後にプロセス後のデータを含むレスポンスをクライアントに返す関数
@@ -47,10 +151,11 @@ def send_response(connection, filepath, stream_rate):
                 total_sent += len(data)
 
             print("処理済みファイルの送信完了")
+            return None
 
-    except Exception as e:
-        print(f"ファイル送信エラー: {str(e)}")
-        send_error_response(connection, ErrorInfo('1004', f'ファイル送信エラー: {str(e)}', 'ネットワーク接続を確認してください。'))
+    except Exception as error:
+        print(f"ファイル送信エラー: {str(error)}")
+        return ErrorInfo('1004', f'ファイル送信エラー: {str(error)}', 'ネットワーク接続を確認してください。')
 
 def send_error_response(connection, error_info):
     # エラーレスポンスをクライアントに返す関数
@@ -66,10 +171,25 @@ def send_error_response(connection, error_info):
 
         print(f"エラーレスポンス送信: {error_info.error_code}")
 
-    except Exception as e:
-        print(f"エラーレスポンス送信失敗: {str(e)}")
+    except Exception as error:
+        print(f"エラーレスポンス送信失敗: {str(error)}")
 
-# 機能的な関数はここから実装
+# その他必要な関数はここから実装
+def load_server_config():
+    with open('config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+    return {
+        'server_address': config['server_address'],
+        'server_port': config['server_port'],
+        'max_storage': config['max_storage'],
+        'dir_path': BASE_DIR + config['storage_dir'],
+        'stream_rate': config['stream_rate']
+    }
+
+# 動画処理などの機能的な関数はここから実装
 def handle_resolution_change(input_filename, dir_path, req_data):
     chosen_resolution = req_data.get('resolution', 0)
 
@@ -98,7 +218,7 @@ def handle_resolution_change(input_filename, dir_path, req_data):
 
     print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
-    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
     if result.returncode != 0:
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
@@ -118,7 +238,7 @@ def handle_aspect_change(input_filename, dir_path, req_data):
         '-aspect', chosen_aspect_ratio,  # アスペクト比を設定
         '-c:v', 'libx264',              # 動画コーデック
         '-c:a', 'copy',                 # 音声はコピー
-        '-preset', 'ultrafast', 
+        '-preset', 'ultrafast',
         output_path
     ]
 
@@ -168,100 +288,25 @@ def get_video_duration(dir_path:str, input_filename:str):
     return float(result.stdout)
 
 def main():
-    with open('config.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-        server_address = config['server_address']
-        server_port = config['server_port']
-        max_storage = config['max_storage']
-        BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        dir_path = BASE_DIR + config['storage_dir']
-        stream_rate = config['stream_rate']
+    config = load_server_config()
 
-    # アドレスファミリ : socket.AF_INET, 通信方式 : SOCK_STREAM = TCP通信（信頼性あり、順番保証、コネクション型）
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind((server_address, server_port))
-    sock.listen(1)
-    print('サーバーが起動します。クライアントからの接続を待ちます。')
+    sock = create_server_socket(config)
 
     while True:
         connection, client_address = sock.accept()
+        print(f'{client_address}と接続しました。')
+
         error = None
+
         try:
-            print('クライアントから接続します。。')
-            header = connection.recv(8)
-            json_size = int.from_bytes(header[:2], 'big')
-            mediatype_size = int.from_bytes(header[2:3], 'big')
-            file_size = int.from_bytes(header[3:], 'big')
-
-            req_params = connection.recv(json_size).decode('utf-8')
-            mediatype = connection.recv(mediatype_size).decode('utf-8')
-
-            filename = f'{uuid.uuid4().hex}.{mediatype}'
-
-            # ファイルサイズが0の場合はエラーとして扱う
-            if file_size <= 0:
-                raise Exception('ファイルサイズが無効です')
-
-            try:
-                with open(os.path.join(dir_path, filename),'wb+') as f:
-                    # すべてのデータの読み書きが終了するまで、クライアントから読み込まれます
-                    while file_size > 0:
-                        data = connection.recv(file_size if file_size <= stream_rate else stream_rate)
-                        f.write(data)
-                        file_size -= len(data)
-            except Exception as file_err:
-                error = ErrorInfo('1001', 'ファイルアップロード中のエラー:' + str(file_err), '解決しない場合は管理者にお問い合わせください。')
-                print(str(file_err))
-            else:
-                print('ファイルのアップロードが完了しました。')
-
-                req_data = json.loads(req_params)
-                action = req_data.get('action', 0)
-
-                print(f"受信したアクション: {action}")
-                print(f"リクエストは${req_data}")
-
-                match action:
-                    case 2:
-                        try:
-                            processed_filename, output_path = handle_resolution_change(filename, dir_path, req_data)
-                            print(f'解像度変更完了: {processed_filename}')
-                            send_response(connection, output_path, stream_rate)
-
-                        except Exception as process_err:
-                            error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
-                            print(f"解像度処理エラー: {str(process_err)}")
-                    case 3:
-                        try:
-                            processed_filename, output_path = handle_aspect_change(filename, dir_path, req_data)
-                            print(f'アスペクト比変更完了: {processed_filename}')
-                            send_response(connection, output_path, stream_rate)
-                        except Exception as process_err:
-                            error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
-                            print(f"処理エラー: {str(process_err)}")
-                    
-                    case 5:
-                        duration_seconds = get_video_duration(dir_path,filename)
-                        if duration_seconds < req_data.get('endseconds'):
-                            error = ErrorInfo('1007', '指定した終了時刻が動画の長さを超えています', '指定範囲は動画の時間を超えない値で設定してください')
-                            print('指定した終了時刻が動画の長さを超えています。処理を終了します')
-                            sys.exit(1)
-
-                        try:
-                            processed_filename,output_path = handle_process_video_clip(filename, dir_path, req_data)
-                            print(f'時間範囲での動画を作成完了: {processed_filename}')
-                            send_response(connection, output_path, stream_rate)
-            
-                        except Exception as process_err:
-                            error = ErrorInfo('1006', f'動画処理中のエラー: {str(process_err)}', 'アップロードした動画を再度確認し、再度トライしてください。')
-                            print(f"処理エラー: {str(process_err)}")
+            error = handle_client_request(config, connection)
 
         except Exception as e:
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')
-            print(str(e))
 
         finally:
             if error is not None:
+                print(error.to_json())
                 send_error_response(connection, error)
 
             print('コネクションを閉じます')
