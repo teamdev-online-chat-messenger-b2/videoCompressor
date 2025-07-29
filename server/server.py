@@ -93,6 +93,10 @@ def store_uploaded_file(config, connection, filename, file_size):
         return None
 
     except Exception as file_err:
+        while file_size > 0:
+            data = connection.recv(file_size if file_size <= config['stream_rate'] else config['stream_rate'])
+            file_size -= len(data)
+
         error = ErrorInfo('1001', 'ファイル保存中のエラー:' + str(file_err), '解決しない場合は管理者にお問い合わせください。')
         return error
 
@@ -213,7 +217,7 @@ def main():
 
         finally:
             if error is not None:
-                print(str(error))
+                print(error.to_json())
                 send_error_response(connection, error)
 
             print('コネクションを閉じます')
