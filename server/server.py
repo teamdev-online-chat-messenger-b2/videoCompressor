@@ -90,12 +90,13 @@ def handle_client_request(config, connection):
         case 4:
             pass
         case 5:
-                duration_seconds = get_video_duration(config['dir_path'],filename)
-                if duration_seconds < req_data.get('endseconds'):
-                    error = ErrorInfo('1007', '指定した終了時刻が動画の長さを超えています', '指定範囲は動画の時間を超えない値で設定してください')
-                    print('指定した終了時刻が動画の長さを超えています。処理を終了します')
-                    sys.exit(1)
+                # validate before process
+                filepath = os.path.join(config['dir_path'], filename)
+                error = validate_video_duration(filepath,req_data.get('endseconds'))
+                if error != None:
+                    return error 
 
+                # process if validate is OK
                 try:
                     processed_filename,output_path = handle_process_video_clip(filename, config['dir_path'], req_data)
                     print(f'時間範囲での動画を作成完了: {processed_filename}')
@@ -104,6 +105,7 @@ def handle_client_request(config, connection):
                 except Exception as process_err:
                     error = ErrorInfo('1006', f'動画処理中のエラー: {str(process_err)}', 'アップロードした動画を再度確認し、再度トライしてください。')
                     print(f"処理エラー: {str(process_err)}")
+                    return error
 
 def store_uploaded_file(config, connection, filename, file_size):
     try:
@@ -274,18 +276,25 @@ def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
 
-def get_video_duration(dir_path:str, input_filename:str):
-    input_path = os.path.join(dir_path, input_filename)
+def get_video_duration(filepath:str):
     cmd = [
         'ffprobe',
         '-v', 'quiet',
         '-show_entries', 'format=duration',
         '-of', 'csv=p=0',  # ヘッダーなしで数値のみ
-        input_path
+        filepath
     ]
     result = subprocess.run(cmd, capture_output=True)
 
     return float(result.stdout)
+
+def validate_video_duration(filepath:str, endseconds:int) -> ErrorInfo | None:
+    duration_seconds = get_video_duration(filepath)
+    error_info = None
+    if duration_seconds < endseconds:
+        error_info = ErrorInfo('1007', '指定した終了時刻が動画の長さを超えています', '指定範囲は動画の時間を超えない値で設定してください')
+        print('指定した終了時刻が動画の長さを超えています。処理を終了します')
+    return error_info
 
 def main():
     config = load_server_config()
