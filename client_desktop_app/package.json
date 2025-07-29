@@ -1,0 +1,22 @@
+{
+  "name": "client_desktop_app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npm run build && electron ./dist/main.js",
+    "build": "tsc && npm run copy-assets",
+    "copy-assets": "cp -r src/*.{html,css,png,jpg,jpeg,gif,svg,ico} dist/ 2>/dev/null || true",
+    "dev": "tsc --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/electron": "^1.4.38",
+    "@types/node": "^24.1.0",
+    "electron": "^37.2.4",
+    "typescript": "^5.8.3"
+  }
+}
