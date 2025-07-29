@@ -91,6 +91,9 @@ def handle_client_request(config, connection):
         case 5:
             pass
 
+    inputfile_path = os.path.join(config['dir_path'], filename)
+    delete_tmp_files([inputfile_path, output_path])
+
 def store_uploaded_file(config, connection, filename, file_size):
     try:
         with open(os.path.join(config['dir_path'], filename),'wb+') as f:
@@ -267,8 +270,6 @@ def main():
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')
 
         finally:
-            inputfile_path = os.path.join(dir_path,filename)
-            delete_tmp_files([inputfile_path, output_path])
             if error is not None:
                 print(error.to_json())
                 send_error_response(connection, error)
