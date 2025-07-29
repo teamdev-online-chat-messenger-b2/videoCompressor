@@ -74,15 +74,18 @@ def handle_client_request(config, connection):
                 print(f"解像度処理エラー: {str(process_err)}")
                 return error
         case 3:
-          try:
-            processed_filename, output_path = handle_aspect_change(filename, dir_path, req_data)
-            print(f'アスペクト比変更完了: {processed_filename}')
-            send_response(connection, output_path, stream_rate)
-            
-          except Exception as process_err:
-            error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
-            print(f"処理エラー: {str(process_err)}")
-            return error
+            try:
+                processed_filename, output_path = handle_aspect_change(filename, config['dir_path'], req_data)
+                print(f'アスペクト比変更完了: {processed_filename}')
+                error = send_response(connection, output_path, config['stream_rate'])
+
+                if error is not None:
+                    return error
+
+            except Exception as process_err:
+                error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
+                print(f"処理エラー: {str(process_err)}")
+                return error
         case 4:
             pass
         case 5:
@@ -221,7 +224,7 @@ def handle_aspect_change(input_filename, dir_path, req_data):
         '-aspect', chosen_aspect_ratio,  # アスペクト比を設定
         '-c:v', 'libx264',              # 動画コーデック
         '-c:a', 'copy',                 # 音声はコピー
-        '-preset', 'ultrafast', 
+        '-preset', 'ultrafast',
         output_path
     ]
 
@@ -243,7 +246,7 @@ def main():
         print(f'{client_address}と接続しました。')
 
         error = None
-        
+
         try:
             error = handle_client_request(config, connection)
 
