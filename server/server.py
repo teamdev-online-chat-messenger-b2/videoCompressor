@@ -189,7 +189,7 @@ def handle_resolution_change(input_filename, dir_path, req_data):
 
     print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
-    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
     if result.returncode != 0:
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
