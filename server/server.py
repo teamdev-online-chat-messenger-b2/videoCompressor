@@ -74,7 +74,15 @@ def handle_client_request(config, connection):
                 print(f"解像度処理エラー: {str(process_err)}")
                 return error
         case 3:
-            pass
+          try:
+            processed_filename, output_path = handle_aspect_change(filename, dir_path, req_data)
+            print(f'アスペクト比変更完了: {processed_filename}')
+            send_response(connection, output_path, stream_rate)
+            
+          except Exception as process_err:
+            error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
+            print(f"処理エラー: {str(process_err)}")
+            return error
         case 4:
             pass
         case 5:
@@ -198,6 +206,33 @@ def handle_resolution_change(input_filename, dir_path, req_data):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
 
+def handle_aspect_change(input_filename, dir_path, req_data):
+    chosen_aspect_ratio = req_data.get('aspect_ratio', 0)
+
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
+    output_filename = f"{base_name}_{chosen_aspect_ratio}.mp4"
+    output_path = os.path.join(dir_path, output_filename)
+
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', input_path,
+        '-aspect', chosen_aspect_ratio,  # アスペクト比を設定
+        '-c:v', 'libx264',              # 動画コーデック
+        '-c:a', 'copy',                 # 音声はコピー
+        '-preset', 'ultrafast', 
+        output_path
+    ]
+
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
+
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
+    if result.returncode != 0:
+        raise Exception(f"FFMPEG エラー: {result.stderr}")
+
+    return output_filename, output_path
+
 def main():
     config = load_server_config()
 
@@ -208,7 +243,7 @@ def main():
         print(f'{client_address}と接続しました。')
 
         error = None
-
+        
         try:
             error = handle_client_request(config, connection)
 
