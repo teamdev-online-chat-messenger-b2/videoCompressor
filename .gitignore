@@ -1,4 +1,6 @@
 .DS_Store
+*.mp4
 .vscode
+/server/storage/
 server/__pycache__
-*mp4
+*.gif
