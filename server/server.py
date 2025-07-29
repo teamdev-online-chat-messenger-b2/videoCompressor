@@ -97,7 +97,7 @@ def handle_resolution_change(input_filename, dir_path, req_data):
 
     print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
-    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
     if result.returncode != 0:
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
@@ -129,6 +129,18 @@ def handle_aspect_change(input_filename, dir_path, req_data):
 
     return output_filename, output_path
 
+def delete_tmp_files(file_paths_to_delete:list):
+    """指定されたパスのファイルを削除する関数"""
+    for file_path in file_paths_to_delete:
+        try:
+            os.remove(file_path)
+            print(f"ファイル {file_path} を削除しました")
+        except FileNotFoundError:
+            print(f"ファイル {file_path} が見つかりません")
+        except PermissionError:
+            print(f"ファイル {file_path} の削除権限がありません")
+        except Exception as e:
+            print(f"ファイル {file_path} の削除に失敗: {e}")
 
 def main():
     with open('config.json', 'r', encoding='utf-8') as f:
@@ -207,6 +219,8 @@ def main():
             print(str(e))
 
         finally:
+            inputfile_path = os.path.join(dir_path,filename)
+            delete_tmp_files([inputfile_path, output_path])
             if error is not None:
                 send_error_response(connection, error)
 
