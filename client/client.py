@@ -155,6 +155,27 @@ def get_gif_webm_choice():
         except ValueError:
             print('正しい数字を入力してください')
     
+def get_aspect_ratio_choice():
+    aspect_ratio_choices = {
+        # key : (aspect_ratio, description)  
+        1: ('4:3', '昔の映像などに使用'),
+        2: ('16:9', 'テレビ・配信動画用')
+    }
+    print('変更可能なアスペクト比リスト')
+    for choise, (aspect_ratio, description) in aspect_ratio_choices.items():
+        print(f'{choise}. {aspect_ratio} {description}')
+    print('------------------------')
+
+    while True:
+        try:
+            user_choise = int(input("変更したいアスペクト比を選択してください: ")) 
+            if user_choise in aspect_ratio_choices:
+                return aspect_ratio_choices[user_choise][0]
+            else:
+                print('リストの中の数字から選択してください')
+        
+        except Exception as e:
+            print(f'エラー：{str(e)}')
 
 def main():
     with open('config.json', 'r', encoding='utf-8') as f:
@@ -192,8 +213,12 @@ def main():
                     'resolution': chosen_resolution
                 }
             case 3:
+                chosen_aspect_ratio = get_aspect_ratio_choice()
                 #動画のアスペクト比の変更
-                req_params = {'action': action}
+                req_params = {
+                    'action': action,
+                    'aspect_ratio': chosen_aspect_ratio 
+                }
             case 4:
                 #動画をオーディオに変換
                 req_params = {'action': action}
