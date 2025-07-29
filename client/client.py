@@ -56,7 +56,11 @@ def get_request_parameters():
             }
         case 3:
             #動画のアスペクト比の変更
-            req_params = {'action': action}
+            chosen_aspect_ration = get_aspect_ratio_choice()
+            req_params = {
+                'action': action,
+                'aspect_ratio': chosen_aspect_ration
+            }
         case 4:
             #動画をオーディオに変換
             req_params = {'action': action}
@@ -231,7 +235,7 @@ def get_resolution_choice():
 
 def get_aspect_ratio_choice():
     aspect_ratio_choices = {
-        # key : (aspect_ratio, description)  
+        # key : (aspect_ratio, description)
         1: ('4:3', '昔の映像などに使用'),
         2: ('16:9', 'テレビ・配信動画用')
     }
@@ -242,12 +246,12 @@ def get_aspect_ratio_choice():
 
     while True:
         try:
-            user_choise = int(input("変更したいアスペクト比を選択してください: ")) 
+            user_choise = int(input("変更したいアスペクト比を選択してください: "))
             if user_choise in aspect_ratio_choices:
                 return aspect_ratio_choices[user_choise][0]
             else:
                 print('リストの中の数字から選択してください')
-        
+
         except Exception as e:
             print(f'エラー：{str(e)}')
 
