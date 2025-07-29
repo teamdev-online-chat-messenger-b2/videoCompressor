@@ -3,6 +3,7 @@ import os
 import json
 import uuid
 import subprocess
+import sys
 
 class ErrorInfo:
     def __init__(self,code, description, solution) -> None:
@@ -89,7 +90,22 @@ def handle_client_request(config, connection):
         case 4:
             pass
         case 5:
-            pass
+                # validate before process
+                filepath = os.path.join(config['dir_path'], filename)
+                error = validate_video_duration(filepath,req_data.get('endseconds'))
+                if error != None:
+                    return error 
+
+                # process if validate is OK
+                try:
+                    processed_filename,output_path = handle_process_video_clip(filename, config['dir_path'], req_data)
+                    print(f'時間範囲での動画を作成完了: {processed_filename}')
+                    send_response(connection, output_path, config['stream_rate'])
+
+                except Exception as process_err:
+                    error = ErrorInfo('1006', f'動画処理中のエラー: {str(process_err)}', 'アップロードした動画を再度確認し、再度トライしてください。')
+                    print(f"処理エラー: {str(process_err)}")
+                    return error
 
 def store_uploaded_file(config, connection, filename, file_size):
     try:
@@ -235,6 +251,50 @@ def handle_aspect_change(input_filename, dir_path, req_data):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
 
     return output_filename, output_path
+
+def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
+    chosen_extension = req_data.get('extension')
+    startseconds = req_data.get('startseconds')
+    endseconds = req_data.get('endseconds')
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
+    output_filename = f"{base_name}.{chosen_extension}"
+    output_path = os.path.join(dir_path, output_filename)
+
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', input_path,
+        '-ss', str(startseconds),
+        '-to', str(endseconds),
+        output_path
+    ]
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
+
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
+    if result.returncode != 0:
+        raise Exception(f"FFMPEG エラー: {result.stderr}")
+    return output_filename, output_path
+
+def get_video_duration(filepath:str):
+    cmd = [
+        'ffprobe',
+        '-v', 'quiet',
+        '-show_entries', 'format=duration',
+        '-of', 'csv=p=0',  # ヘッダーなしで数値のみ
+        filepath
+    ]
+    result = subprocess.run(cmd, capture_output=True)
+
+    return float(result.stdout)
+
+def validate_video_duration(filepath:str, endseconds:int) -> ErrorInfo | None:
+    duration_seconds = get_video_duration(filepath)
+    error_info = None
+    if duration_seconds < endseconds:
+        error_info = ErrorInfo('1007', '指定した終了時刻が動画の長さを超えています', '指定範囲は動画の時間を超えない値で設定してください')
+        print('指定した終了時刻が動画の長さを超えています。処理を終了します')
+    return error_info
 
 def main():
     config = load_server_config()
