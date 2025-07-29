@@ -208,6 +208,17 @@ def compress_video(input_filename, dir_path):
     output_filename = f"{base_name}_compressed.mp4"
     output_path = os.path.join(dir_path, output_filename)
 
+    # 入力ファイルのサイズ取得(MB)
+    input_file_size = os.path.getsize(input_path) / (1024 * 1024)
+
+    # 圧縮率を動的に決定
+    if input_file_size > 300:
+        preset = 'slow'
+    elif input_file_size > 100:
+        preset = 'medium'
+    else:
+        preset = 'fast'
+
     ffmpeg_cmd = [
         'ffmpeg',
         '-y',
