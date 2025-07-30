@@ -3,7 +3,6 @@ import os
 import json
 import uuid
 import subprocess
-import sys
 
 class ErrorInfo:
     def __init__(self,code, description, solution) -> None:
@@ -88,13 +87,24 @@ def handle_client_request(config, connection):
                 print(f"処理エラー: {str(process_err)}")
                 return error
         case 4:
-            pass
+            try:
+                processed_filename, output_path = handle_video_conversion(filename, config['dir_path'])
+                print(f'オーディオへの変換完了: {processed_filename}')
+                error  = send_response(connection, output_path, config['stream_rate'])
+
+                if error is not None:
+                    return error
+
+            except Exception as process_err:
+                error = ErrorInfo('1005', f'オーディオへの変換中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
+                print(f"オーディオへの変換中のエラー: {str(process_err)}")
+                return error
         case 5:
                 # validate before process
                 filepath = os.path.join(config['dir_path'], filename)
                 error = validate_video_duration(filepath,req_data.get('endseconds'))
                 if error != None:
-                    return error 
+                    return error
 
                 # process if validate is OK
                 try:
@@ -252,6 +262,31 @@ def handle_aspect_change(input_filename, dir_path, req_data):
 
     return output_filename, output_path
 
+def handle_video_conversion(input_filename, dir_path):
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
+    output_filename = f"{base_name}_audio.mp3"
+    output_path = os.path.join(dir_path, output_filename)
+
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', input_path,
+        '-vn',
+        '-acodec', 'mp3',
+        '-ab', '192k',
+        '-ar', '44100',
+        '-ac', '2',
+        output_path
+    ]
+
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
+
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
+    if result.returncode != 0:
+        raise Exception(f"FFMPEG エラー: {result.stderr}")
+    return output_filename, output_path
+
 def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
     chosen_extension = req_data.get('extension')
     startseconds = req_data.get('startseconds')
@@ -269,6 +304,7 @@ def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
         '-to', str(endseconds),
         output_path
     ]
+
     print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
