@@ -127,6 +127,9 @@ def handle_client_request(config, connection):
                     print(f"処理エラー: {str(process_err)}")
                     return error
 
+    inputfile_path = os.path.join(config['dir_path'], filename)
+    delete_tmp_files([inputfile_path, output_path])
+
 def store_uploaded_file(config, connection, filename, file_size):
     try:
         with open(os.path.join(config['dir_path'], filename),'wb+') as f:
@@ -309,6 +312,18 @@ def handle_aspect_change(input_filename, dir_path, req_data):
 
     return output_filename, output_path
 
+def delete_tmp_files(file_paths_to_delete:list):
+    """指定されたパスのファイルを削除する関数"""
+    for file_path in file_paths_to_delete:
+        try:
+            os.remove(file_path)
+            print(f"ファイル {file_path} を削除しました")
+        except FileNotFoundError:
+            print(f"ファイル {file_path} が見つかりません")
+        except PermissionError:
+            print(f"ファイル {file_path} の削除権限がありません")
+        except Exception as e:
+            print(f"ファイル {file_path} の削除に失敗: {e}")
 def handle_video_conversion(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
     base_name = input_filename.split('.')[0]
