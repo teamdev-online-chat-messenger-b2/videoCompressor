@@ -96,7 +96,7 @@ def handle_client_request(config, connection):
                     return error
 
             except Exception as process_err:
-                error = ErrorInfo('1003', f'オーディオへの変換中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
+                error = ErrorInfo('1005', f'オーディオへの変換中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
                 print(f"オーディオへの変換中のエラー: {str(process_err)}")
                 return error
         case 5:
