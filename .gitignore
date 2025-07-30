@@ -4,6 +4,7 @@
 /server/storage/
 server/__pycache__
 *mp4
+*mp3
 *.gif
 
 # client_desktop_app
@@ -76,3 +77,4 @@ jspm_packages/
 
 # dotenv environment variables file
 .env
+

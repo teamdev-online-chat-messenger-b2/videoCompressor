@@ -78,7 +78,7 @@ def get_request_parameters():
         case _:
             req_params = {'action': action}
 
-    return req_params
+    return action, req_params
 
 def create_request_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
@@ -115,7 +115,7 @@ def send_file_data(config, sock, filepath, req_params):
 
 def upload_file(config, sock):
     filepath = get_file_input()
-    req_params = get_request_parameters()
+    action, req_params = get_request_parameters()
 
     try:
         send_file_data(config, sock, filepath, req_params)
@@ -127,7 +127,7 @@ def upload_file(config, sock):
                 print(f"サーバーエラー：{response_body}")
             else:
                 print("処理成功！")
-                save_processed_file(response_body)
+                save_processed_file(response_body,)
 
         except Exception as recv_error:
             print(f"レスポンス受信エラー: {str(recv_error)}")
@@ -160,8 +160,9 @@ def receive_response(sock):
 
         return 'success', file_data
 
+
 def save_processed_file(file_data):
-    output_filename = input('処理後の動画を保存するファイル名(拡張子含む)を入力してください\n')
+    output_filename = input('処理後の動画を保存するファイル名（拡張子含む）を入力してください\n')
 
     if isinstance(file_data, bytes):
         with open(output_filename, 'wb') as f:
@@ -239,7 +240,7 @@ def get_resolution_choice():
             print("正しい数字を入力してください")
 
 def get_start_end_seconds():
-     
+
      while True:
         try:
             # 切り取る開始時間~終了時間を取得する
@@ -257,7 +258,7 @@ def get_start_end_seconds():
 
         except ValueError:
             print("正しい数字を入力してください")
-    
+
 def get_gif_webm_choice():
     # GIFとWEBMの選択
     gif_webm_choices = {
@@ -277,10 +278,10 @@ def get_gif_webm_choice():
                 return gif_webm_choices[user_choise].lower()
             else:
                 print("正しい選択肢を選んでください")
-        
+
         except ValueError:
             print('正しい数字を入力してください')
-    
+
 def get_aspect_ratio_choice():
     aspect_ratio_choices = {
         # key : (aspect_ratio, description)

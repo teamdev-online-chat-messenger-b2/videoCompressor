@@ -3,7 +3,6 @@ import os
 import json
 import uuid
 import subprocess
-import sys
 
 class ErrorInfo:
     def __init__(self,code, description, solution) -> None:
@@ -60,7 +59,17 @@ def handle_client_request(config, connection):
 
     match action:
         case 1:
-            pass
+            try:
+                processed_filename, output_path = compress_video(filename, config['dir_path'])
+                print(f'動画圧縮完了: {processed_filename}')
+                error = send_response(connection, output_path, config['stream_rate'])
+
+                if error is not None:
+                    return error
+            except Exception as process_err:
+                error = ErrorInfo('1002', f'動画圧縮中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
+                print(f"圧縮処理エラー: {str(process_err)}")
+                return error
         case 2:
             try:
                 processed_filename, output_path = handle_resolution_change(filename, config['dir_path'], req_data)
@@ -88,13 +97,24 @@ def handle_client_request(config, connection):
                 print(f"処理エラー: {str(process_err)}")
                 return error
         case 4:
-            pass
+            try:
+                processed_filename, output_path = handle_video_conversion(filename, config['dir_path'])
+                print(f'オーディオへの変換完了: {processed_filename}')
+                error  = send_response(connection, output_path, config['stream_rate'])
+
+                if error is not None:
+                    return error
+
+            except Exception as process_err:
+                error = ErrorInfo('1005', f'オーディオへの変換中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
+                print(f"オーディオへの変換中のエラー: {str(process_err)}")
+                return error
         case 5:
                 # validate before process
                 filepath = os.path.join(config['dir_path'], filename)
                 error = validate_video_duration(filepath,req_data.get('endseconds'))
                 if error != None:
-                    return error 
+                    return error
 
                 # process if validate is OK
                 try:
@@ -191,6 +211,43 @@ def load_server_config():
         'stream_rate': config['stream_rate']
     }
 
+# 動画圧縮に関する関数
+def compress_video(input_filename, dir_path):
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
+    output_filename = f"{base_name}_compressed.mp4"
+    output_path = os.path.join(dir_path, output_filename)
+
+    # 入力ファイルのサイズ取得(MB)
+    input_file_size = os.path.getsize(input_path) / (1024 * 1024)
+
+    # 圧縮率を動的に決定
+    if input_file_size > 300:
+        preset = 'slow'
+    elif input_file_size > 100:
+        preset = 'medium'
+    else:
+        preset = 'fast'
+
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', input_path,
+        '-vcodec', 'libx264',  # 動画コーデック
+        '-crf', '28',           # 圧縮率
+        '-preset', preset,     # エンコード速度
+        '-c:a', 'copy',        # 音声はコピー
+        output_path
+    ]
+
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
+
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
+    if result.returncode != 0:
+        raise Exception(f"FFMPEG エラー: {result.stderr}")
+
+    return output_filename, output_path
+
 # 動画処理などの機能的な関数はここから実装
 def handle_resolution_change(input_filename, dir_path, req_data):
     chosen_resolution = req_data.get('resolution', 0)
@@ -252,6 +309,31 @@ def handle_aspect_change(input_filename, dir_path, req_data):
 
     return output_filename, output_path
 
+def handle_video_conversion(input_filename, dir_path):
+    input_path = os.path.join(dir_path, input_filename)
+    base_name = input_filename.split('.')[0]
+    output_filename = f"{base_name}_audio.mp3"
+    output_path = os.path.join(dir_path, output_filename)
+
+    ffmpeg_cmd = [
+        'ffmpeg',
+        '-y',
+        '-i', input_path,
+        '-vn',
+        '-acodec', 'mp3',
+        '-ab', '192k',
+        '-ar', '44100',
+        '-ac', '2',
+        output_path
+    ]
+
+    print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
+
+    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
+    if result.returncode != 0:
+        raise Exception(f"FFMPEG エラー: {result.stderr}")
+    return output_filename, output_path
+
 def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
     chosen_extension = req_data.get('extension')
     startseconds = req_data.get('startseconds')
@@ -269,6 +351,7 @@ def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
         '-to', str(endseconds),
         output_path
     ]
+
     print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
