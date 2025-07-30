@@ -2,6 +2,7 @@ import socket
 import sys
 import os
 import json
+from datetime import datetime
 
 # 共通のコネククション関連の関数はここから実装
 class CheckBeforeSend():
@@ -66,7 +67,14 @@ def get_request_parameters():
             req_params = {'action': action}
         case 5:
             #時間範囲での GIF と WEBM の作成
-            req_params = {'action': action}
+            startseconds, endseconds = get_start_end_seconds()
+            chosen_extension = get_gif_webm_choice()
+            req_params = {
+                'action': action,
+                'startseconds': startseconds,
+                'endseconds': endseconds,
+                'extension': chosen_extension
+            }
         case _:
             req_params = {'action': action}
 
@@ -152,19 +160,9 @@ def receive_response(sock):
 
         return 'success', file_data
 
-def save_processed_file(file_data, action):
-    output_filename = input('処理後の動画を保存するファイル名を入力してください\n')
 
-    match action:
-        case 4:
-            if not output_filename.endswith('.mp3'):
-                output_filename += '.mp3'
-        case 5:
-            if not output_filename.endswith(('.gif', '.webm')):
-                output_filename += '.gif'
-        case _:
-            if not output_filename.endswith('.mp4'):
-                output_filename += '.mp4'
+def save_processed_file(file_data):
+    output_filename = input('処理後の動画を保存するファイル名（拡張子含む）を入力してください\n')
 
     if isinstance(file_data, bytes):
         with open(output_filename, 'wb') as f:
@@ -241,6 +239,49 @@ def get_resolution_choice():
         except ValueError:
             print("正しい数字を入力してください")
 
+def get_start_end_seconds():
+     
+     while True:
+        try:
+            # 切り取る開始時間~終了時間を取得する
+            starttime_str = input("開始時刻（HH:MM:SS）を入力してください: ")
+            starttime_obj = datetime.strptime(starttime_str, "%H:%M:%S")
+            endtime_str = input("終了時刻（HH:MM:SS）を入力してください: ")
+            endtime_obj = datetime.strptime(endtime_str, "%H:%M:%S")
+            startseconds = starttime_obj.hour * 3600 + starttime_obj.minute * 60 + starttime_obj.second
+            endseconds = endtime_obj.hour * 3600 + endtime_obj.minute * 60 + endtime_obj.second
+
+            if startseconds <= endseconds:
+                return startseconds, endseconds
+            else:
+                print("終了時刻は、開始時間より後にしてください")
+
+        except ValueError:
+            print("正しい数字を入力してください")
+    
+def get_gif_webm_choice():
+    # GIFとWEBMの選択
+    gif_webm_choices = {
+        1: "GIF",
+        2: "WEBM"
+    }
+    print("-------以下の形式から選んで下さい-------")
+    for choice, extension in gif_webm_choices.items():
+        print(f"{choice}. {extension}")
+    print("------------------------")
+
+    while True:
+
+        try:
+            user_choise = int(input('希望の形式を選んでください'))
+            if user_choise in gif_webm_choices:
+                return gif_webm_choices[user_choise].lower()
+            else:
+                print("正しい選択肢を選んでください")
+        
+        except ValueError:
+            print('正しい数字を入力してください')
+    
 def get_aspect_ratio_choice():
     aspect_ratio_choices = {
         # key : (aspect_ratio, description)
