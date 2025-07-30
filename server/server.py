@@ -225,7 +225,7 @@ def compress_video(input_filename, dir_path):
         '-i', input_path,
         '-vcodec', 'libx264',  # 動画コーデック
         '-crf', '28',           # 圧縮率
-        '-preset', 'medium',     # エンコード速度
+        '-preset', preset,     # エンコード速度
         '-c:a', 'copy',        # 音声はコピー
         output_path
     ]
