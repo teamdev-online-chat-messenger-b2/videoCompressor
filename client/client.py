@@ -70,7 +70,7 @@ def get_request_parameters():
         case _:
             req_params = {'action': action}
 
-    return req_params
+    return action, req_params
 
 def create_request_header(json_size, mediatype_size, payload_size):
     return  json_size.to_bytes(2, 'big') + mediatype_size.to_bytes(1,'big') + payload_size.to_bytes(5,'big')
@@ -107,7 +107,7 @@ def send_file_data(config, sock, filepath, req_params):
 
 def upload_file(config, sock):
     filepath = get_file_input()
-    req_params = get_request_parameters()
+    action, req_params = get_request_parameters()
 
     try:
         send_file_data(config, sock, filepath, req_params)
@@ -119,7 +119,7 @@ def upload_file(config, sock):
                 print(f"サーバーエラー：{response_body}")
             else:
                 print("処理成功！")
-                save_processed_file(response_body)
+                save_processed_file(response_body, action)
 
         except Exception as recv_error:
             print(f"レスポンス受信エラー: {str(recv_error)}")
@@ -152,11 +152,19 @@ def receive_response(sock):
 
         return 'success', file_data
 
-def save_processed_file(file_data):
+def save_processed_file(file_data, action):
     output_filename = input('処理後の動画を保存するファイル名を入力してください\n')
 
-    if not output_filename.endswith('.mp4'):
-        output_filename += '.mp4'
+    match action:
+        case 4:
+            if not output_filename.endswith('.mp3'):
+                output_filename += '.mp3'
+        case 5:
+            if not output_filename.endswith(('.gif', '.webm')):
+                output_filename += '.gif'
+        case _:
+            if not output_filename.endswith('.mp4'):
+                output_filename += '.mp4'
 
     if isinstance(file_data, bytes):
         with open(output_filename, 'wb') as f:
