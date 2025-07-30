@@ -3,7 +3,6 @@ import os
 import json
 import uuid
 import subprocess
-import sys
 
 class ErrorInfo:
     def __init__(self,code, description, solution) -> None:
@@ -105,7 +104,7 @@ def handle_client_request(config, connection):
                 filepath = os.path.join(config['dir_path'], filename)
                 error = validate_video_duration(filepath,req_data.get('endseconds'))
                 if error != None:
-                    return error 
+                    return error
 
                 # process if validate is OK
                 try:
@@ -267,18 +266,20 @@ def handle_video_conversion(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
     base_name = input_filename.split('.')[0]
     output_filename = f"{base_name}_audio.mp3"
+    output_path = os.path.join(dir_path, output_filename)
+
     ffmpeg_cmd = [
         'ffmpeg',
         '-y',
         '-i', input_path,
-      　'-vn',
+        '-vn',
         '-acodec', 'mp3',
         '-ab', '192k',
         '-ar', '44100',
         '-ac', '2',
         output_path
     ]
-    
+
     print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)
@@ -303,7 +304,7 @@ def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
         '-to', str(endseconds),
         output_path
     ]
-    
+
     print(f"FFMPEG実行中: {' '.join(ffmpeg_cmd)}")
 
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=False)

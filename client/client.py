@@ -127,7 +127,7 @@ def upload_file(config, sock):
                 print(f"サーバーエラー：{response_body}")
             else:
                 print("処理成功！")
-                save_processed_file(response_body, action)
+                save_processed_file(response_body,)
 
         except Exception as recv_error:
             print(f"レスポンス受信エラー: {str(recv_error)}")
@@ -240,7 +240,7 @@ def get_resolution_choice():
             print("正しい数字を入力してください")
 
 def get_start_end_seconds():
-     
+
      while True:
         try:
             # 切り取る開始時間~終了時間を取得する
@@ -258,7 +258,7 @@ def get_start_end_seconds():
 
         except ValueError:
             print("正しい数字を入力してください")
-    
+
 def get_gif_webm_choice():
     # GIFとWEBMの選択
     gif_webm_choices = {
@@ -278,10 +278,10 @@ def get_gif_webm_choice():
                 return gif_webm_choices[user_choise].lower()
             else:
                 print("正しい選択肢を選んでください")
-        
+
         except ValueError:
             print('正しい数字を入力してください')
-    
+
 def get_aspect_ratio_choice():
     aspect_ratio_choices = {
         # key : (aspect_ratio, description)
