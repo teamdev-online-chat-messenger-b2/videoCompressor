@@ -12,6 +12,7 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, 'index.html'));
+  win.webContents.openDevTools();  // 開発時のみ
 }
 
 app.whenReady().then(createWindow);
