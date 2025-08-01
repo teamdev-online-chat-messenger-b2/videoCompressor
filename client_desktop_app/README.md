@@ -66,7 +66,10 @@ TODO : ホットリロード対応
 client_desktop_app/
 ├── src/
 │   ├── main.ts          # Electronメインプロセス
+│   └── preload.ts       # レンダラープロセス（render.ts）からメインプロセス（main.ts）への安全な橋渡し
+|   └── render.ts        # レンダラープロセス(DOM操作など、Node.jsで動かさない機能)
 │   └── index.html       # メインウィンドウのHTML
+|   └── style.css        # メインウィンドウのCSS
 ├── dist/                # コンパイル後のファイル（自動生成）
 ├── package.json         # プロジェクト設定
 ├── tsconfig.json        # TypeScript設定
