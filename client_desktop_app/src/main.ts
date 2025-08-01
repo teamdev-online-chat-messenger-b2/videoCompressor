@@ -6,8 +6,7 @@ function createWindow() {
     width: 800,
     height: 600,
     webPreferences: {
-      contextIsolation: false,
-      nodeIntegration: true, // 開発中のみ
+      preload: path.join(app.getAppPath(), 'preload.js')
     },
   });
 
