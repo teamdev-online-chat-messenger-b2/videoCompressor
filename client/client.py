@@ -121,13 +121,13 @@ def upload_file(config, sock):
         send_file_data(config, sock, filepath, req_params)
 
         try:
-            status, response_body = receive_response(sock)
+            status, file_extenstion, response_body = receive_response(sock)
 
             if status == 'error':
                 print(f"サーバーエラー：{response_body}")
             else:
                 print("処理成功！")
-                save_processed_file(response_body,)
+                save_processed_file(file_extenstion, response_body)
 
         except Exception as recv_error:
             print(f"レスポンス受信エラー: {str(recv_error)}")
@@ -144,13 +144,16 @@ def receive_response(sock):
         error_bytes = sock.recv(error_size)
         error_text = error_bytes.decode('utf-8')
 
-        return 'error', error_text
+        return 'error', None, error_text
     else:
         # 成功の場合
-        file_size = int.from_bytes(sock.recv(8), 'big')
+        success_size = int.from_bytes(sock.recv(4), 'big')
+
+        success_bytes = sock.recv(success_size)
+        success_json = json.loads(success_bytes.decode('utf-8'))
 
         file_data = b''
-        remaining = file_size
+        remaining = success_json['file_size']
         while remaining > 0:
             chunk = sock.recv(min(1400, remaining))
             if not chunk:
@@ -158,11 +161,11 @@ def receive_response(sock):
             file_data += chunk
             remaining -= len(chunk)
 
-        return 'success', file_data
+        return 'success', success_json['file_extension'], file_data
 
-
-def save_processed_file(file_data):
-    output_filename = input('処理後の動画を保存するファイル名（拡張子含む）を入力してください\n')
+def save_processed_file(file_extenstion, file_data):
+    output_filename = input('処理後の動画を保存するファイル名を拡張子を含まずに入力してください\n')
+    output_filename = output_filename + '.' + file_extenstion
 
     if isinstance(file_data, bytes):
         with open(output_filename, 'wb') as f:
