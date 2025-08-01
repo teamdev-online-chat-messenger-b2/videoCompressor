@@ -4,8 +4,27 @@ import json
 import uuid
 import subprocess
 
+class SuccessInfo:
+    def __init__(self, filepath, file_size) -> None:
+        self.filepath = filepath
+        self.file_size = file_size
+
+    @property
+    def file_extension(self):
+        return os.path.splitext(self.filepath)[1].lstrip('.')
+
+    def to_dict(self):
+        return {
+            'status_code': 'success',
+            'file_extension': self.file_extension,
+            'file_size': self.file_size
+        }
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
 class ErrorInfo:
-    def __init__(self,code, description, solution) -> None:
+    def __init__(self, code, description, solution) -> None:
         self.error_code = code
         self.description = description
         self.solution = solution
@@ -161,8 +180,12 @@ def send_response(connection, filepath, stream_rate):
 
             # サクセスコード：１（１バイト)とファイルサイズ（８バイト）
             success_header = b'\x01'
-            size_header = file_size.to_bytes(8, 'big')
-            connection.send(success_header + size_header)
+            success_json = SuccessInfo(filepath, file_size).to_json()
+            success_bytes = success_json.encode('utf-8')
+
+            connection.send(success_header)
+            connection.send(len(success_bytes).to_bytes(4, 'big'))
+            connection.sendall(success_bytes)
 
             print(f"処理済みファイル（{file_size}バイト）を送信中")
 
@@ -324,6 +347,7 @@ def delete_tmp_files(file_paths_to_delete:list):
             print(f"ファイル {file_path} の削除権限がありません")
         except Exception as e:
             print(f"ファイル {file_path} の削除に失敗: {e}")
+
 def handle_video_conversion(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
     base_name = input_filename.split('.')[0]
