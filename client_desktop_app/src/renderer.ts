@@ -5,6 +5,7 @@ interface ProcessingParams {
   startseconds?: number;
   endseconds?: number;
   extension?: string;
+  outputFileName?: string;
 }
 
 interface SelectedFile {
@@ -17,6 +18,7 @@ class VideoProcessorUI {
   private selectedFile: SelectedFile | null = null;
   private selectedOperation: string | null = null;
   private processingParams: ProcessingParams | null = null;
+  private progressInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.initializeEventListeners();
@@ -48,11 +50,6 @@ class VideoProcessorUI {
             filePath,
           );
 
-          if (!fileStats) {
-            alert("ファイル情報を取得できませんでした");
-            return;
-          }
-
           const maxSize = Math.pow(2, 40);
           if (fileStats.size > maxSize) {
             alert("処理対象の動画ファイルは1TB以下です。");
@@ -73,6 +70,8 @@ class VideoProcessorUI {
 
           this.enableOperationSelection();
         } else {
+          alert("ファイル情報を取得できませんでした");
+          return;
         }
       } catch (error) {
         console.error("ファイルが選択中のエラー：", error);
@@ -193,14 +192,16 @@ class VideoProcessorUI {
           this.processingParams,
         );
 
+        // 処理後の成功レスポンスを引数にhandleProcessingSuccessを呼び出す
         this.handleProcessingSuccess(result);
       } catch (error) {
-        console.error("プロセス中エラー:", error);
+        // 処理後のエラーレスポンスを引数にhandleProcessingSuccessを呼び出す
         this.handleProcessingError(error);
       }
     });
   }
 
+  // setupExecuteButton内で使用
   private collectProcessingParams(): ProcessingParams | null {
     const action = this.getActionNumber(this.selectedOperation!);
     const params: ProcessingParams = {
@@ -264,11 +265,12 @@ class VideoProcessorUI {
       return null;
     }
 
-    (params as any).outputFileName = outputFileName;
+    params.outputFileName = outputFileName;
 
     return params;
   }
 
+  // collectProcessingParams内で使用
   private getActionNumber(operation: string): number {
     // Mapを使用し処理モードに応じてnumberを返す
     const actionMap: { [key: string]: number } = {
@@ -281,6 +283,7 @@ class VideoProcessorUI {
     return actionMap[operation];
   }
 
+  // collectProcessingParams内で使用
   private timeToSeconds(timeStr: string): number {
     const parts = timeStr.split(":").map(Number);
     if (parts.length === 2) {
@@ -291,6 +294,7 @@ class VideoProcessorUI {
     return 0;
   }
 
+  // setupExecuteButton内で使用
   private showProgressSection(): void {
     // 他のセクションを全て隠す
     document.querySelector(".upload-section")?.classList.add("hidden");
@@ -306,6 +310,7 @@ class VideoProcessorUI {
     this.animateProgress();
   }
 
+  // showProgressSection内で使用
   private animateProgress(): void {
     const progressFill = document.getElementById("progressFill") as HTMLElement;
     const progressText = document.getElementById("progressText") as HTMLElement;
@@ -320,44 +325,44 @@ class VideoProcessorUI {
     }, 500);
 
     // 後でインターバルをを削除するようにIDをセットする
-    (this as any).progressInterval = interval;
+    this.progressInterval = interval;
   }
 
-  private handleProcessingSuccess(result: any): void {
-    if ((this as any).progressInterval) {
-      clearInterval((this as any).progressInterval);
+  // setupExecuteButton内で使用
+  private async handleProcessingSuccess(result: any): Promise<void> {
+    // 処理が終わってから呼び出されるのでプログレスバーをマックスに持っていく
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
     }
-
     const progressFill = document.getElementById("progressFill") as HTMLElement;
     const progressText = document.getElementById("progressText") as HTMLElement;
     progressFill.style.width = "100%";
     progressText.textContent = "処理完了！";
 
-    setTimeout(async () => {
-      try {
-        const downloadResult = await (window as any).electronAPI.downloadFile({
-          filename: result.filename,
-          fileData: result.fileData,
-          fileExtension: result.fileExtension,
-        });
+    try {
+      const downloadResult = await (window as any).electronAPI.downloadFile({
+        filename: result.filename,
+        fileData: result.fileData,
+        fileExtension: result.fileExtension,
+      });
 
-        if (downloadResult.success) {
-          alert(`ファイルを保存しました: ${downloadResult.path}`);
-          this.resetUI();
-        } else {
-          alert("保存がキャンセルされました");
-          this.resetUI();
-        }
-      } catch (error) {
-        alert("保存中にエラーが発生しました");
+      if (downloadResult.success) {
+        alert(`ファイルを保存しました: ${downloadResult.path}`);
+        this.resetUI();
+      } else {
+        alert("保存がキャンセルされました");
         this.resetUI();
       }
-    }, 1000);
+    } catch (error) {
+      alert("保存中にエラーが発生しました");
+      this.resetUI();
+    }
   }
 
+  // setupExecuteButton内で使用
   private handleProcessingError(error: any): void {
-    if ((this as any).progressInterval) {
-      clearInterval((this as any).progressInterval);
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval);
     }
 
     console.error("Processing error:", error);
@@ -379,26 +384,3 @@ class VideoProcessorUI {
 document.addEventListener("DOMContentLoaded", () => {
   new VideoProcessorUI();
 });
-
-const style = document.createElement("style");
-style.textContent = `
-  .operation-card.selected {
-    border: 2px solid #007bff;
-    background-color: #e3f2fd;
-  }
-
-  .upload-area.drag-over {
-    border-color: #007bff;
-    background-color: #f0f8ff;
-  }
-
-  .operation-card.disabled {
-    opacity: 0.5;
-    pointer-events: none;
-  }
-
-  .hidden {
-    display: none !important;
-  }
-`;
-document.head.appendChild(style);
