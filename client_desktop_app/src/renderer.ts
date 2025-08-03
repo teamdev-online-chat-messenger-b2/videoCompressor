@@ -44,8 +44,6 @@ class VideoProcessorUI {
         const filePath = await (window as any).electronAPI.openVideoDialog();
 
         if (filePath) {
-          console.log("選択されたファイルパス：", filePath);
-
           const fileStats = await (window as any).electronAPI.getFileStats(
             filePath,
           );
@@ -75,7 +73,6 @@ class VideoProcessorUI {
 
           this.enableOperationSelection();
         } else {
-          console.log("ファイルが選択されていません");
         }
       } catch (error) {
         console.error("ファイルが選択中のエラー：", error);
@@ -186,9 +183,6 @@ class VideoProcessorUI {
         return; // Validation failed
       }
 
-      console.log("パラメターを送信:", this.processingParams);
-      console.log("選択されたファイル:", this.selectedFile);
-
       // プログレスを表示
       this.showProgressSection();
 
@@ -199,7 +193,6 @@ class VideoProcessorUI {
           this.processingParams,
         );
 
-        console.log("レスポンスを受信:", result);
         this.handleProcessingSuccess(result);
       } catch (error) {
         console.error("プロセス中エラー:", error);
@@ -261,6 +254,18 @@ class VideoProcessorUI {
         break;
     }
 
+    const outputFileNameInput = document.getElementById(
+      "outputFileName",
+    ) as HTMLInputElement;
+    const outputFileName = outputFileNameInput.value.trim();
+
+    if (!outputFileName) {
+      alert("出力ファイル名を入力してください");
+      return null;
+    }
+
+    (params as any).outputFileName = outputFileName;
+
     return params;
   }
 
@@ -319,7 +324,6 @@ class VideoProcessorUI {
   }
 
   private handleProcessingSuccess(result: any): void {
-    // Complete progress
     if ((this as any).progressInterval) {
       clearInterval((this as any).progressInterval);
     }
@@ -329,14 +333,29 @@ class VideoProcessorUI {
     progressFill.style.width = "100%";
     progressText.textContent = "処理完了！";
 
-    // Show result section after a brief delay
-    setTimeout(() => {
-      this.showResultSection(result);
+    setTimeout(async () => {
+      try {
+        const downloadResult = await (window as any).electronAPI.downloadFile({
+          filename: result.filename,
+          fileData: result.fileData,
+          fileExtension: result.fileExtension,
+        });
+
+        if (downloadResult.success) {
+          alert(`ファイルを保存しました: ${downloadResult.path}`);
+          this.resetUI();
+        } else {
+          alert("保存がキャンセルされました");
+          this.resetUI();
+        }
+      } catch (error) {
+        alert("保存中にエラーが発生しました");
+        this.resetUI();
+      }
     }, 1000);
   }
 
   private handleProcessingError(error: any): void {
-    // Clear progress animation
     if ((this as any).progressInterval) {
       clearInterval((this as any).progressInterval);
     }
@@ -344,52 +363,23 @@ class VideoProcessorUI {
     console.error("Processing error:", error);
     alert(`処理中にエラーが発生しました: ${error.message || error}`);
 
-    // Reset UI
     this.resetUI();
   }
 
-  private showResultSection(result: any): void {
-    const progressSection = document.getElementById("progressSection");
-    const resultSection = document.getElementById("resultSection");
-    const resultMessage = document.getElementById("resultMessage");
-
-    progressSection?.classList.add("hidden");
-    resultSection?.classList.remove("hidden");
-
-    if (resultMessage) {
-      resultMessage.textContent = `変換が完了しました！ファイル: ${result.filename || "処理済みファイル"}`;
-    }
-
-    // Setup download button
-    this.setupDownloadButton(result);
-  }
-
-  private setupDownloadButton(result: any): void {
-    const downloadBtn = document.getElementById("downloadBtn");
-    downloadBtn?.addEventListener("click", () => {
-      // This will be handled by the main process
-      (window as any).electronAPI.downloadFile(result);
-    });
-  }
-
   private resetUI(): void {
-    // Show original sections
     document.querySelector(".upload-section")?.classList.remove("hidden");
     document.querySelector(".operation-section")?.classList.remove("hidden");
     document.querySelector(".execute-section")?.classList.remove("hidden");
 
-    // Hide progress and result sections
     document.getElementById("progressSection")?.classList.add("hidden");
     document.getElementById("resultSection")?.classList.add("hidden");
   }
 }
 
-// Initialize the UI when the DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
   new VideoProcessorUI();
 });
 
-// Add CSS for selected state and drag-over effect
 const style = document.createElement("style");
 style.textContent = `
   .operation-card.selected {
