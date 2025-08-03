@@ -9,6 +9,7 @@ interface ElectronAPI {
   openVideoDialog: () => Promise<string | any>;
   getFileStats: (filePath: string) => Promise<FileStats | any>;
   processVideo: (filePath: string, params: any) => Promise<any>;
+  downloadFile: (fileData: any) => Promise<any>;
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {
@@ -22,6 +23,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
         requestParams: params,
       });
 
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  },
+  downloadFile: async (fileData: any) => {
+    try {
+      const result = await ipcRenderer.invoke("download-file", fileData);
       return result;
     } catch (error) {
       throw error;
