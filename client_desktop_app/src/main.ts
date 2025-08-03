@@ -4,16 +4,19 @@ import * as path from "path";
 import * as fs from "fs";
 import * as net from "net";
 
+interface ProcessingParams {
+  action: number;
+  resolution?: string;
+  aspect_ratio?: string;
+  startseconds?: number;
+  endseconds?: number;
+  extension?: string;
+  outputFileName?: string;
+}
+
 interface ProcessingRequest {
   filePath: string;
-  requestParams: {
-    action: number;
-    resolution?: string;
-    aspect_ratio?: string;
-    startseconds?: number;
-    endseconds?: number;
-    extension?: string;
-  };
+  requestParams: ProcessingParams;
 }
 
 interface ServerConfig {
@@ -47,7 +50,6 @@ ipcMain.handle("open-video-dialog", async () => {
         extensions: ["mp4"],
       },
     ],
-    title: "Select a video file",
   });
 
   // @ts-ignore - Suppress TypeScript error
@@ -66,8 +68,7 @@ ipcMain.handle("get-file-stats", async (event, filePath: string) => {
       isFile: stats.isFile(),
     };
   } catch (error) {
-    console.error("ファイル情報取得中のエラー：", error);
-    return null;
+    return error;
   }
 });
 
@@ -97,18 +98,13 @@ ipcMain.handle(
           { name: "Video Files", extensions: [fileData.fileExtension] },
           { name: "All Files", extensions: ["*"] },
         ],
-        title: "Save processed video",
       });
 
       // @ts-ignore - Suppress TypeScript error
       if (!result.canceled && result.filePath) {
         let bufferToWrite;
 
-        if (Array.isArray(fileData.fileData)) {
-          bufferToWrite = Buffer.from(fileData.fileData);
-        } else if (fileData.fileData instanceof Uint8Array) {
-          bufferToWrite = Buffer.from(fileData.fileData);
-        } else if (Buffer.isBuffer(fileData.fileData)) {
+        if (Buffer.isBuffer(fileData.fileData)) {
           bufferToWrite = fileData.fileData;
         } else {
           bufferToWrite = Buffer.from(fileData.fileData);
@@ -122,8 +118,6 @@ ipcMain.handle(
 
       return { success: false };
     } catch (error) {
-      console.error("=== DOWNLOAD ERROR ===");
-      console.error("Error details:", error);
       throw error;
     }
   },
@@ -155,7 +149,6 @@ function connectToServer(config: ServerConfig): Promise<net.Socket> {
     });
 
     socket.on("error", (error) => {
-      console.error("Socket error:", error);
       reject(error);
     });
 
@@ -182,7 +175,7 @@ function createRequestHeader(
 async function sendFileData(
   socket: net.Socket,
   filePath: string,
-  requestParams: any,
+  requestParams: ProcessingParams,
   config: ServerConfig,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -219,11 +212,9 @@ async function sendFileData(
       });
 
       fileStream.on("error", (error) => {
-        console.error("動画データ送信中のエラー：", error);
         reject(error);
       });
     } catch (error) {
-      console.error("動画データ送信中のエラー：", error);
       reject(error);
     }
   });
@@ -231,98 +222,40 @@ async function sendFileData(
 
 async function receiveResponse(socket: net.Socket): Promise<any> {
   return new Promise((resolve, reject) => {
-    let buffer = Buffer.alloc(0);
-    let headerReceived = false;
-    let responseCode: number;
-    let dataSize: number;
-    let totalDataReceived = 0;
-    let successJson: any = null;
-    let fileData = Buffer.alloc(0);
-    let expectingFileData = false;
+    const chunks: Buffer[] = [];
 
     socket.on("data", (chunk: Buffer) => {
-      buffer = Buffer.concat([buffer, chunk]);
+      chunks.push(chunk);
+    });
 
+    socket.on("end", () => {
       try {
-        if (!headerReceived && buffer.length >= 1) {
-          responseCode = buffer.readUInt8(0);
+        const buffer = Buffer.concat(chunks);
 
-          if (responseCode === 0x00) {
-            if (buffer.length >= 5) {
-              dataSize = buffer.readUInt32BE(1);
-              if (buffer.length >= 5 + dataSize) {
-                const errorData = buffer.subarray(5, 5 + dataSize);
-                const errorText = errorData.toString("utf-8");
-                headerReceived = true;
-                resolve({ status: "error", error: errorText });
-                return;
-              }
-            }
-          } else {
-            if (buffer.length >= 5) {
-              dataSize = buffer.readUInt32BE(1);
-              if (buffer.length >= 5 + dataSize) {
-                const jsonData = buffer.subarray(5, 5 + dataSize);
-                successJson = JSON.parse(jsonData.toString("utf-8"));
+        const responseCode = buffer.readUIntBE(0, 1);
+        const dataSize = buffer.readUIntBE(1, 4);
 
-                buffer = buffer.subarray(5 + dataSize);
-                totalDataReceived = 0;
-                expectingFileData = true;
-                headerReceived = true;
+        if (responseCode === 0x00) {
+          const errorText = buffer.subarray(5, 5 + dataSize).toString("utf-8");
+          resolve({ status: "error", error: errorText });
+        } else {
+          const jsonData = buffer.subarray(5, 5 + dataSize);
+          const successJson = JSON.parse(jsonData.toString("utf-8"));
+          const fileData = buffer.subarray(5 + dataSize);
 
-                if (buffer.length > 0) {
-                  fileData = Buffer.concat([fileData, buffer]);
-                  totalDataReceived += buffer.length;
-                  buffer = Buffer.alloc(0);
-                }
-
-                if (totalDataReceived >= successJson.file_size) {
-                  resolve({
-                    status: "success",
-                    filename: successJson.file_extension
-                      ? `output.${successJson.file_extension}`
-                      : "output.mp4",
-                    fileData: fileData.subarray(0, successJson.file_size),
-                    fileExtension: successJson.file_extension,
-                  });
-                }
-              }
-            }
-          }
-        } else if (headerReceived && expectingFileData) {
-          fileData = Buffer.concat([fileData, buffer]);
-          totalDataReceived += buffer.length;
-          buffer = Buffer.alloc(0);
-
-          if (totalDataReceived >= successJson.file_size) {
-            resolve({
-              status: "success",
-              filename: successJson.file_extension
-                ? `output.${successJson.file_extension}`
-                : "output.mp4",
-              fileData: fileData.subarray(0, successJson.file_size),
-              fileExtension: successJson.file_extension,
-            });
-          }
+          resolve({
+            status: "success",
+            filename: `output.${successJson.file_extension}`,
+            fileData: Array.from(fileData.subarray(0, successJson.file_size)),
+            fileExtension: successJson.file_extension,
+          });
         }
       } catch (error) {
-        console.error("Error processing received data:", error);
         reject(error);
       }
     });
 
-    socket.on("error", (error) => {
-      console.error("Socket error during receive:", error);
-      reject(error);
-    });
-
-    socket.on("close", () => {
-      if (!headerReceived) {
-        reject(
-          new Error("Connection closed before receiving complete response"),
-        );
-      }
-    });
+    socket.on("error", reject);
   });
 }
 
@@ -342,8 +275,7 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
       throw new Error(response.error);
     }
 
-    const userFileName =
-      (request.requestParams as any).outputFileName || "output";
+    const userFileName = request.requestParams.outputFileName || "output";
     const finalFileName = `${userFileName}.${response.fileExtension}`;
 
     return {
@@ -354,8 +286,6 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
       fileData: Array.from(response.fileData),
     };
   } catch (error) {
-    console.error("=== ERROR PROCESSING VIDEO ===");
-    console.error("Error:", error);
     throw error;
   } finally {
     if (socket) {
