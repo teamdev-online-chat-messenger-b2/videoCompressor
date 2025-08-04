@@ -164,7 +164,7 @@ function createRequestHeader(
   return header;
 }
 
-async function sendFileData(
+function sendFileData(
   socket: net.Socket,
   filePath: string,
   requestParams: ProcessingParams,
@@ -212,7 +212,7 @@ async function sendFileData(
   });
 }
 
-async function receiveResponse(socket: net.Socket): Promise<any> {
+function receiveResponse(socket: net.Socket): Promise<any> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
 
