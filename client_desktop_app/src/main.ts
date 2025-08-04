@@ -39,7 +39,6 @@ function createWindow() {
 }
 
 ipcMain.handle("open-video-dialog", async () => {
-  // eslint-disable-next-line @typescript-eslint/await-thenable
   const result = await dialog.showOpenDialog({
     properties: ["openFile"],
     filters: [
@@ -50,9 +49,7 @@ ipcMain.handle("open-video-dialog", async () => {
     ],
   });
 
-  // @ts-ignore - Suppress TypeScript error
   if (!result.canceled && result.filePaths.length > 0) {
-    // @ts-ignore - Suppress TypeScript error
     return result.filePaths[0];
   }
   return null;
@@ -98,7 +95,6 @@ ipcMain.handle(
         ],
       });
 
-      // @ts-ignore - Suppress TypeScript error
       if (!result.canceled && result.filePath) {
         let bufferToWrite;
 
@@ -108,9 +104,7 @@ ipcMain.handle(
           bufferToWrite = Buffer.from(fileData.fileData);
         }
 
-        // @ts-ignore - Suppress TypeScript error
         fs.writeFileSync(result.filePath, bufferToWrite);
-        // @ts-ignore - Suppress TypeScript error
         return { success: true, path: result.filePath };
       }
 

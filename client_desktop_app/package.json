@@ -14,7 +14,6 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@types/electron": "^1.4.38",
     "@types/node": "^24.1.0",
     "electron": "^37.2.4",
     "typescript": "^5.8.3"
