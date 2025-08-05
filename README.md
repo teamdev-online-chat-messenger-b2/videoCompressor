@@ -25,6 +25,7 @@ curl -sSL https://install.python-poetry.org | python3 -
 poetry install
 
 # 5. スクリプト実行例
+poetry run python server/server.py
 poetry run python client/client.py
 ```
 
