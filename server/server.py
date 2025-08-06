@@ -3,6 +3,7 @@ import os
 import json
 import uuid
 import subprocess
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 class SuccessInfo:
     def __init__(self, filepath, file_size) -> None:
@@ -237,7 +238,20 @@ def load_server_config():
         'stream_rate': config['stream_rate']
     }
 
-# 動画圧縮に関する関数
+def delete_tmp_files(file_paths_to_delete:list):
+    """指定されたパスのファイルを削除する関数"""
+    for file_path in file_paths_to_delete:
+        try:
+            os.remove(file_path)
+            print(f"ファイル {file_path} を削除しました")
+        except FileNotFoundError:
+            print(f"ファイル {file_path} が見つかりません")
+        except PermissionError:
+            print(f"ファイル {file_path} の削除権限がありません")
+        except Exception as e:
+            print(f"ファイル {file_path} の削除に失敗: {e}")
+
+# 動画圧縮に関する関数はここから実装
 def compress_video(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
     base_name = input_filename.split('.')[0]
@@ -274,7 +288,7 @@ def compress_video(input_filename, dir_path):
 
     return output_filename, output_path
 
-# 動画処理などの機能的な関数はここから実装
+# 動画解像度などの機能的な関数はここから実装
 def handle_resolution_change(input_filename, dir_path, req_data):
     chosen_resolution = req_data.get('resolution', 0)
 
@@ -308,6 +322,7 @@ def handle_resolution_change(input_filename, dir_path, req_data):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
 
+# 動画アスペクト比処理に関する関数はここから実装
 def handle_aspect_change(input_filename, dir_path, req_data):
     chosen_aspect_ratio = req_data.get('aspect_ratio', 0)
 
@@ -335,19 +350,7 @@ def handle_aspect_change(input_filename, dir_path, req_data):
 
     return output_filename, output_path
 
-def delete_tmp_files(file_paths_to_delete:list):
-    """指定されたパスのファイルを削除する関数"""
-    for file_path in file_paths_to_delete:
-        try:
-            os.remove(file_path)
-            print(f"ファイル {file_path} を削除しました")
-        except FileNotFoundError:
-            print(f"ファイル {file_path} が見つかりません")
-        except PermissionError:
-            print(f"ファイル {file_path} の削除権限がありません")
-        except Exception as e:
-            print(f"ファイル {file_path} の削除に失敗: {e}")
-
+# 音声への変換処理に関する関数はここから実装
 def handle_video_conversion(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
     base_name = input_filename.split('.')[0]
@@ -373,6 +376,7 @@ def handle_video_conversion(input_filename, dir_path):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
 
+# GIFとWEBMへの変換処理に関する関数はここから実装
 def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
     chosen_extension = req_data.get('extension')
     startseconds = req_data.get('startseconds')
@@ -418,9 +422,9 @@ def validate_video_duration(filepath:str, endseconds:int) -> ErrorInfo | None:
         print('指定した終了時刻が動画の長さを超えています。処理を終了します')
     return error_info
 
+# メイン（エントリーポイント）
 def main():
     config = load_server_config()
-
     sock = create_server_socket(config)
 
     while True:
