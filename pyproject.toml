@@ -8,6 +8,10 @@ packages = [
     { include = "server" }
 ]
 
+[tool.poetry.dependencies]
+python = "^3.11"
+cryptography = "^45.0.6"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
