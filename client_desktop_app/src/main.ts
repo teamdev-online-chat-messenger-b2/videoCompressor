@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { generateKeyPairSync } from 'crypto';
+import { app, BrowserWindow, ipcMain, dialog, safeStorage } from "electron";
 import { stat } from "fs/promises";
 import * as path from "path";
 import * as fs from "fs";
@@ -23,6 +24,34 @@ interface ServerConfig {
   server_address: string;
   server_port: number;
   stream_rate: number;
+}
+
+interface KeyPaths {
+  securePrivatePath: string;
+  publicPath: string;
+}
+
+function generateCryptoKeys():void{
+  const {publicKey, privateKey} = generateKeyPairSync("rsa", {
+    modulusLength: 2048,  
+    publicKeyEncoding: {
+      type: 'spki',       
+      format: 'pem',      
+    },
+    privateKeyEncoding: {
+      type: 'pkcs8',      
+      format: 'pem',
+    }
+  })
+  
+  const encryptedKey = safeStorage.encryptString(privateKey);
+  
+  const saveDir = app.getPath('userData');
+  const SecurePrivateKeyPath = path.join(saveDir, 'key.secure');
+  const PublicKeyPath = path.join(saveDir, 'publicKey.pem');
+
+  fs.writeFileSync(SecurePrivateKeyPath, encryptedKey);
+  fs.writeFileSync(PublicKeyPath, publicKey);
 }
 
 function createWindow() {
@@ -164,6 +193,24 @@ function createRequestHeader(
   return header;
 }
 
+function getKeyPaths():KeyPaths{
+  const saveDir = app.getPath('userData')
+  return {
+    securePrivatePath: path.join(saveDir, 'key.secure'),
+    publicPath: path.join(saveDir, 'publicKey.pem')
+  }
+}
+
+async function sendPublicKey(socket: net.Socket, publicKeyPath:string){
+    const publicKey = fs.readFileSync(publicKeyPath, 'utf-8')
+    const keySize = Buffer.byteLength(publicKey)
+    const sizeBuffer = Buffer.alloc(4);
+    sizeBuffer.writeUInt32BE(keySize, 0);
+
+    socket.write(sizeBuffer);
+    socket.write(publicKey);
+}
+
 function sendFileData(
   socket: net.Socket,
   filePath: string,
@@ -259,6 +306,8 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
   try {
     socket = await connectToServer(config);
 
+    const {publicPath} = getKeyPaths()
+    await sendPublicKey(socket, publicPath)
     await sendFileData(socket, request.filePath, request.requestParams, config);
 
     const response = await receiveResponse(socket);
@@ -286,7 +335,10 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  generateCryptoKeys()
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
