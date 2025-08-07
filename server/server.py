@@ -3,7 +3,9 @@ import os
 import json
 import uuid
 import subprocess
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+import base64
 
 class SuccessInfo:
     def __init__(self, filepath, file_size) -> None:
@@ -251,6 +253,77 @@ def delete_tmp_files(file_paths_to_delete:list):
         except Exception as e:
             print(f"ファイル {file_path} の削除に失敗: {e}")
 
+class RSAManager:
+    def __init__(self):
+        self.private_key = rsa.generate_private_key(
+            public_exponent = 65537,
+            key_size = 2048
+        )
+        self.public_key = self.private_key.public_key()
+
+    def generatePublicKeyPem(self) -> bytes:
+        pem_bytes = self.public_key.public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return pem_bytes
+
+    def decryptContent(self, content) -> bytes:
+        decrypted_bytes = self.private_key.decrypt(
+            content,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        return decrypted_bytes
+
+# RSAテスト用関数
+def test_rsa():
+    rsa_mgr = RSAManager()
+
+    # まずサーバーがPEMフォーマットの公開鍵を作成し送信する
+    public_key_pem = rsa_mgr.generatePublicKeyPem()
+    print(f"Public Key in Pem format: {public_key_pem}")
+
+    # クライアントが送られたきたPEMフォーマットの公開鍵をオブジェクトに戻す
+    public_key = serialization.load_pem_public_key(public_key_pem)
+    print(f"Public Key: {public_key}")
+
+    # クライアントが送りたいメッセージを作成する
+    message = '{"action": 1, "resolution": "1080p"}'
+    print(f"Original: {message}")
+
+    # クライアントは公開鍵オブジェクトを使ってUFE-8でエンコードされたメッセージを暗号化を実行する
+    if isinstance(public_key, rsa.RSAPublicKey):
+        encrypted_bytes = public_key.encrypt(
+            message.encode('utf-8'),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+    else:
+        raise TypeError("Not an RSA public key")
+
+    # 暗号化されたメッセージをbase64でさらに包みサーバに送信する
+    encoded_encrypted_bytes = base64.b64encode(encrypted_bytes)
+
+    # サーバーは受信した暗号化メッセージをbase64でディコードしUTF-8形式に戻す
+    raw_encrypted_bytes = base64.b64decode(encoded_encrypted_bytes)
+
+    # UTF-8形式の暗号化メッセージをディクリプトする
+    decrypted_bytes = rsa_mgr.decryptContent(raw_encrypted_bytes)
+
+    # UTF-8形式のメッセージをディコードしstring型になったメッセージを取得する（完成）
+    decrypted_string = decrypted_bytes.decode('utf-8')
+
+    # string型になったメッセージを表示する
+    print(f"Decrypted: {decrypted_string}")
+    print(f"Success: {message == decrypted_string}")
+
 # 動画圧縮に関する関数はここから実装
 def compress_video(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
@@ -449,3 +522,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+    # RSAテスト用関数を呼び出す
+    # test_rsa()
