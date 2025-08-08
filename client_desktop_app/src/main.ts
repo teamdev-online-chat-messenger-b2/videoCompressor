@@ -236,6 +236,13 @@ function readExactly(socket: net.Socket): Promise<Buffer> {
     socket.on("data", onData);
     socket.on("error", onError);
 
+    // timeoutがないと永遠にサーバーからのレスポンスを待ち続けるため、追加
+    setTimeout(() => {
+      socket.off("data", onData);
+      socket.off("error", onError);
+      reject(new Error("Read timeout"));
+    }, 10000);
+
   });
 }
 
