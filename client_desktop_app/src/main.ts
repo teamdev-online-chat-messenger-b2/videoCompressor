@@ -201,7 +201,7 @@ function getKeyPaths(): KeyPaths {
   };
 }
 
-function readExactly(socket: net.Socket): Promise<Buffer> {
+function receivePublicKeyInfo(socket: net.Socket): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size: number | null = null;
@@ -262,7 +262,7 @@ async function exchangePublicKeys(
 
     // ここで失敗している模様
     console.log("サーバーの公開鍵を受信開始");
-    const serverKeyBuffer = await readExactly(socket);
+    const serverKeyBuffer = await receivePublicKeyInfo(socket);
     const serverPublicKey = serverKeyBuffer.toString("utf8");
     console.log("サーバーの公開鍵を受信完了");
 
