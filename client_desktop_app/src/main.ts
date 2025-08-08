@@ -260,7 +260,6 @@ async function exchangePublicKeys(
     socket.write(publicKey, "utf8");
     console.log("クライアントの公開鍵を送信");
 
-    // ここで失敗している模様
     console.log("サーバーの公開鍵を受信開始");
     const serverKeyBuffer = await receivePublicKeyInfo(socket);
     const serverPublicKey = serverKeyBuffer.toString("utf8");
