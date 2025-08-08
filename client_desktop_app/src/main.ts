@@ -201,34 +201,41 @@ function getKeyPaths(): KeyPaths {
   };
 }
 
-async function readExactly(socket: net.Socket, bytes: number): Promise<Buffer> {
+function readExactly(socket: net.Socket): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    let buffer = Buffer.alloc(0);
+    const chunks: Buffer[] = [];
+    let size: number | null = null;
+    const headerLen = 4;
 
-    const onData = (data: Buffer) => {
-      buffer = Buffer.concat([buffer, data]);
-      if (buffer.length >= bytes) {
+    // データ受信時のコールバック関数
+    const onData = (chunk: Buffer) => {
+      chunks.push(chunk);
+      const buffer = Buffer.concat(chunks);
+
+      // まだサイズ未取得で、ヘッダ分が揃ったら読む
+      if (size === null && buffer.length >= headerLen) {
+        // 4B長さヘッダの場合
+        size = buffer.readUInt32BE(0);
+      }
+
+      // 本体が揃ったら一度だけ処理してリスナー解除
+      if (size !== null && buffer.length >= headerLen + size) {
+        const client_public_key = buffer.subarray(headerLen, headerLen + size);
         socket.off("data", onData);
         socket.off("error", onError);
-        resolve(buffer.subarray(0, bytes));
+        resolve(client_public_key);
       }
     };
 
-    const onError = (error: Error) => {
+    const onError = (err: Error) => {
       socket.off("data", onData);
       socket.off("error", onError);
-      reject(error);
+      reject(err);
     };
 
     socket.on("data", onData);
     socket.on("error", onError);
 
-    // 5 second timeout
-    setTimeout(() => {
-      socket.off("data", onData);
-      socket.off("error", onError);
-      reject(new Error("Read timeout"));
-    }, 10000);
   });
 }
 
@@ -239,8 +246,6 @@ async function exchangePublicKeys(
   try {
     const publicKey = fs.readFileSync(publicKeyPath, "utf-8");
     const keySize = Buffer.byteLength(publicKey, "utf8");
-    console.log("クライアントの公開鍵を送信");
-
     const sizeBuffer = Buffer.alloc(4);
     sizeBuffer.writeUInt32BE(keySize, 0);
 
@@ -248,14 +253,11 @@ async function exchangePublicKeys(
     socket.write(publicKey, "utf8");
     console.log("クライアントの公開鍵を送信");
 
-    const serverKeySizeBuffer = await readExactly(socket, 4);
-    const serverKeySize = serverKeySizeBuffer.readUInt32BE(0);
-    console.log("サーバーの公開鍵のサイズを受信：", serverKeySize);
-
     // ここで失敗している模様
-    const serverKeyBuffer = await readExactly(socket, serverKeySize);
+    console.log("サーバーの公開鍵を受信開始");
+    const serverKeyBuffer = await readExactly(socket);
     const serverPublicKey = serverKeyBuffer.toString("utf8");
-    console.log("サーバーの公開鍵を受信");
+    console.log("サーバーの公開鍵を受信完了");
 
     console.log("公開鍵の交換に成功");
 
