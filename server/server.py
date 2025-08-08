@@ -53,7 +53,39 @@ def create_server_socket(config):
     return sock
 
 # リクエストに関係する関数はここから実装
+def initialize_rsa():
+    global global_rsa_manager
+    global_rsa_manager = RSAManager()
+    print("RSA鍵を生成")
+
+def exchange_public_keys(connection):
+    try:
+        # RSA公開鍵の取得（鍵の長さ（４バイト）、鍵）
+        client_public_key_length = int.from_bytes(connection.recv(4), 'big')
+        client_public_key_pem = connection.recv(client_public_key_length).decode('utf-8')
+        client_public_key = serialization.load_pem_public_key(client_public_key_pem.encode())
+        print("クライアントの公開鍵をロード完了")
+
+        # クライアントのPEMフォーマットの公開鍵
+        server_public_key_pem = global_rsa_manager.generatePublicKeyPem()
+
+        connection.send(len(server_public_key_pem).to_bytes(4, 'big'))
+        connection.send(server_public_key_pem)
+        print("サーバーの公開鍵を送信完了")
+
+        if isinstance(client_public_key, rsa.RSAPublicKey):
+            print("公開鍵の交換完了")
+            return client_public_key
+        else:
+            raise TypeError("クライアントの公開鍵はRSAフォーマットではありません")
+
+    except Exception as e:
+        print(f"公開鍵の交換に失敗：{e}")
+        raise
+
 def handle_client_request(config, connection):
+    client_public_key = exchange_public_keys(connection)
+
     # ヘッダー（８バイト）の中にある、JSONサイズ（２バイト）、メディアタイプ（１バイト）、ファイルサイズ（５バイト）
     header = connection.recv(8)
     json_size = int.from_bytes(header[:2], 'big')
@@ -497,6 +529,8 @@ def validate_video_duration(filepath:str, endseconds:int) -> ErrorInfo | None:
 
 # メイン（エントリーポイント）
 def main():
+    initialize_rsa()
+
     config = load_server_config()
     sock = create_server_socket(config)
 
