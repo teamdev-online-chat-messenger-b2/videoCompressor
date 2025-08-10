@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from 'crypto';
+import { generateKeyPairSync } from "crypto";
 import { app, BrowserWindow, ipcMain, dialog, safeStorage } from "electron";
 import { stat } from "fs/promises";
 import * as path from "path";
@@ -31,24 +31,24 @@ interface KeyPaths {
   publicPath: string;
 }
 
-function generateCryptoKeys():void{
-  const {publicKey, privateKey} = generateKeyPairSync("rsa", {
-    modulusLength: 2048,  
+function generateCryptoKeys(): void {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
     publicKeyEncoding: {
-      type: 'spki',       
-      format: 'pem',      
+      type: "spki",
+      format: "pem",
     },
     privateKeyEncoding: {
-      type: 'pkcs8',      
-      format: 'pem',
-    }
-  })
-  
+      type: "pkcs8",
+      format: "pem",
+    },
+  });
+
   const encryptedKey = safeStorage.encryptString(privateKey);
-  
-  const saveDir = app.getPath('userData');
-  const SecurePrivateKeyPath = path.join(saveDir, 'key.secure');
-  const PublicKeyPath = path.join(saveDir, 'publicKey.pem');
+
+  const saveDir = app.getPath("userData");
+  const SecurePrivateKeyPath = path.join(saveDir, "key.secure");
+  const PublicKeyPath = path.join(saveDir, "publicKey.pem");
 
   fs.writeFileSync(SecurePrivateKeyPath, encryptedKey);
   fs.writeFileSync(PublicKeyPath, publicKey);
@@ -193,22 +193,84 @@ function createRequestHeader(
   return header;
 }
 
-function getKeyPaths():KeyPaths{
-  const saveDir = app.getPath('userData')
+function getKeyPaths(): KeyPaths {
+  const saveDir = app.getPath("userData");
   return {
-    securePrivatePath: path.join(saveDir, 'key.secure'),
-    publicPath: path.join(saveDir, 'publicKey.pem')
-  }
+    securePrivatePath: path.join(saveDir, "key.secure"),
+    publicPath: path.join(saveDir, "publicKey.pem"),
+  };
 }
 
-async function sendPublicKey(socket: net.Socket, publicKeyPath:string){
-    const publicKey = fs.readFileSync(publicKeyPath, 'utf-8')
-    const keySize = Buffer.byteLength(publicKey)
+function receivePublicKeyInfo(socket: net.Socket): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size: number | null = null;
+    const headerLen = 4;
+
+    // データ受信時のコールバック関数
+    const onData = (chunk: Buffer) => {
+      chunks.push(chunk);
+      const buffer = Buffer.concat(chunks);
+
+      // まだサイズ未取得で、ヘッダ分が揃ったら読む
+      if (size === null && buffer.length >= headerLen) {
+        // 4B長さヘッダの場合
+        size = buffer.readUInt32BE(0);
+      }
+
+      // 本体が揃ったら一度だけ処理してリスナー解除
+      if (size !== null && buffer.length >= headerLen + size) {
+        const client_public_key = buffer.subarray(headerLen, headerLen + size);
+        socket.off("data", onData);
+        socket.off("error", onError);
+        resolve(client_public_key);
+      }
+    };
+
+    const onError = (err: Error) => {
+      socket.off("data", onData);
+      socket.off("error", onError);
+      reject(err);
+    };
+
+    socket.on("data", onData);
+    socket.on("error", onError);
+
+    // timeoutがないと永遠にサーバーからのレスポンスを待ち続けるため、追加
+    setTimeout(() => {
+      socket.off("data", onData);
+      socket.off("error", onError);
+      reject(new Error("Read timeout"));
+    }, 10000);
+  });
+}
+
+async function exchangePublicKeys(
+  socket: net.Socket,
+  publicKeyPath: string,
+): Promise<string> {
+  try {
+    const publicKey = fs.readFileSync(publicKeyPath, "utf-8");
+    const keySize = Buffer.byteLength(publicKey, "utf8");
     const sizeBuffer = Buffer.alloc(4);
     sizeBuffer.writeUInt32BE(keySize, 0);
 
     socket.write(sizeBuffer);
-    socket.write(publicKey);
+    socket.write(publicKey, "utf8");
+    console.log("クライアントの公開鍵を送信");
+
+    console.log("サーバーの公開鍵を受信開始");
+    const serverKeyBuffer = await receivePublicKeyInfo(socket);
+    const serverPublicKey = serverKeyBuffer.toString("utf8");
+    console.log("サーバーの公開鍵を受信完了");
+
+    console.log("公開鍵の交換に成功");
+
+    return serverPublicKey;
+  } catch (error) {
+    console.error("公開鍵の交換に失敗:", error);
+    throw new Error(`公開鍵の交換に失敗：${error}`);
+  }
 }
 
 function sendFileData(
@@ -306,8 +368,10 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
   try {
     socket = await connectToServer(config);
 
-    const {publicPath} = getKeyPaths()
-    await sendPublicKey(socket, publicPath)
+    const { publicPath } = getKeyPaths();
+
+    const serverKey = await exchangePublicKeys(socket, publicPath);
+
     await sendFileData(socket, request.filePath, request.requestParams, config);
 
     const response = await receiveResponse(socket);
@@ -336,7 +400,7 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
 }
 
 app.whenReady().then(() => {
-  generateCryptoKeys()
+  generateCryptoKeys();
   createWindow();
 });
 

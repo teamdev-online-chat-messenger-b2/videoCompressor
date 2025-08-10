@@ -3,6 +3,8 @@ import os
 import json
 import uuid
 import subprocess
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 class SuccessInfo:
     def __init__(self, filepath, file_size) -> None:
@@ -50,7 +52,39 @@ def create_server_socket(config):
     return sock
 
 # リクエストに関係する関数はここから実装
+def initialize_rsa():
+    global global_rsa_manager
+    global_rsa_manager = RSAManager()
+    print("RSA鍵を生成")
+
+def exchange_public_keys(connection):
+    try:
+        # RSA公開鍵の取得（鍵の長さ（４バイト）、鍵）
+        client_public_key_length = int.from_bytes(connection.recv(4), 'big')
+        client_public_key_pem = connection.recv(client_public_key_length).decode('utf-8')
+        client_public_key = serialization.load_pem_public_key(client_public_key_pem.encode())
+        print("クライアントの公開鍵をロード完了")
+
+        # クライアントのPEMフォーマットの公開鍵
+        server_public_key_pem = global_rsa_manager.generatePublicKeyPem()
+
+        connection.send(len(server_public_key_pem).to_bytes(4, 'big'))
+        connection.send(server_public_key_pem)
+        print("サーバーの公開鍵を送信完了")
+
+        if isinstance(client_public_key, rsa.RSAPublicKey):
+            print("公開鍵の交換完了")
+            return client_public_key
+        else:
+            raise TypeError("クライアントの公開鍵はRSAフォーマットではありません")
+
+    except Exception as e:
+        print(f"公開鍵の交換に失敗：{e}")
+        raise
+
 def handle_client_request(config, connection):
+    client_public_key = exchange_public_keys(connection)
+
     # ヘッダー（８バイト）の中にある、JSONサイズ（２バイト）、メディアタイプ（１バイト）、ファイルサイズ（５バイト）
     header = connection.recv(8)
     json_size = int.from_bytes(header[:2], 'big')
@@ -237,7 +271,46 @@ def load_server_config():
         'stream_rate': config['stream_rate']
     }
 
-# 動画圧縮に関する関数
+def delete_tmp_files(file_paths_to_delete:list):
+    """指定されたパスのファイルを削除する関数"""
+    for file_path in file_paths_to_delete:
+        try:
+            os.remove(file_path)
+            print(f"ファイル {file_path} を削除しました")
+        except FileNotFoundError:
+            print(f"ファイル {file_path} が見つかりません")
+        except PermissionError:
+            print(f"ファイル {file_path} の削除権限がありません")
+        except Exception as e:
+            print(f"ファイル {file_path} の削除に失敗: {e}")
+
+class RSAManager:
+    def __init__(self):
+        self.private_key = rsa.generate_private_key(
+            public_exponent = 65537,
+            key_size = 2048
+        )
+        self.public_key = self.private_key.public_key()
+
+    def generatePublicKeyPem(self) -> bytes:
+        pem_bytes = self.public_key.public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return pem_bytes
+
+    def decryptContent(self, content) -> bytes:
+        decrypted_bytes = self.private_key.decrypt(
+            content,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        return decrypted_bytes
+
+# 動画圧縮に関する関数はここから実装
 def compress_video(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
     base_name = input_filename.split('.')[0]
@@ -274,7 +347,7 @@ def compress_video(input_filename, dir_path):
 
     return output_filename, output_path
 
-# 動画処理などの機能的な関数はここから実装
+# 動画解像度などの機能的な関数はここから実装
 def handle_resolution_change(input_filename, dir_path, req_data):
     chosen_resolution = req_data.get('resolution', 0)
 
@@ -308,6 +381,7 @@ def handle_resolution_change(input_filename, dir_path, req_data):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
 
+# 動画アスペクト比処理に関する関数はここから実装
 def handle_aspect_change(input_filename, dir_path, req_data):
     chosen_aspect_ratio = req_data.get('aspect_ratio', 0)
 
@@ -335,19 +409,7 @@ def handle_aspect_change(input_filename, dir_path, req_data):
 
     return output_filename, output_path
 
-def delete_tmp_files(file_paths_to_delete:list):
-    """指定されたパスのファイルを削除する関数"""
-    for file_path in file_paths_to_delete:
-        try:
-            os.remove(file_path)
-            print(f"ファイル {file_path} を削除しました")
-        except FileNotFoundError:
-            print(f"ファイル {file_path} が見つかりません")
-        except PermissionError:
-            print(f"ファイル {file_path} の削除権限がありません")
-        except Exception as e:
-            print(f"ファイル {file_path} の削除に失敗: {e}")
-
+# 音声への変換処理に関する関数はここから実装
 def handle_video_conversion(input_filename, dir_path):
     input_path = os.path.join(dir_path, input_filename)
     base_name = input_filename.split('.')[0]
@@ -373,6 +435,7 @@ def handle_video_conversion(input_filename, dir_path):
         raise Exception(f"FFMPEG エラー: {result.stderr}")
     return output_filename, output_path
 
+# GIFとWEBMへの変換処理に関する関数はここから実装
 def handle_process_video_clip(input_filename:str, dir_path:str, req_data:dict):
     chosen_extension = req_data.get('extension')
     startseconds = req_data.get('startseconds')
@@ -418,9 +481,11 @@ def validate_video_duration(filepath:str, endseconds:int) -> ErrorInfo | None:
         print('指定した終了時刻が動画の長さを超えています。処理を終了します')
     return error_info
 
+# メイン（エントリーポイント）
 def main():
-    config = load_server_config()
+    initialize_rsa()
 
+    config = load_server_config()
     sock = create_server_socket(config)
 
     while True:
