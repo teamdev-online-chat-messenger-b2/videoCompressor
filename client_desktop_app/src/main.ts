@@ -242,7 +242,6 @@ function receivePublicKeyInfo(socket: net.Socket): Promise<Buffer> {
       socket.off("error", onError);
       reject(new Error("Read timeout"));
     }, 10000);
-
   });
 }
 
@@ -372,7 +371,6 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
     const { publicPath } = getKeyPaths();
 
     const serverKey = await exchangePublicKeys(socket, publicPath);
-    console.log("サーバーの公開鍵を取得：", serverKey);
 
     await sendFileData(socket, request.filePath, request.requestParams, config);
 
