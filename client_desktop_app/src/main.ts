@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes, publicEncrypt, constants } from "crypto";
+import { generateKeyPairSync, randomBytes, publicEncrypt, constants, createCipheriv } from "crypto";
 import { app, BrowserWindow, ipcMain, dialog, safeStorage } from "electron";
 import { stat } from "fs/promises";
 import * as path from "path";
@@ -82,6 +82,24 @@ async function sendEncryptedAESKey(encryptedAesKey: Buffer, socket: net.Socket){
   sizeBuffer.writeUInt32BE(encryptedAesKey.length, 0);
   socket.write(sizeBuffer);
   socket.write(encryptedAesKey);
+}
+
+// データを暗号化
+function encryptChunk(chunk: Buffer, key: Buffer): Buffer {
+  // 1. 12バイトのランダムなnonce（ナンス）を作成
+  const nonce = randomBytes(12);
+
+  // 2. AES-256-GCMで暗号化器を作成
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+
+  // 3. 入力されたデータ（chunk）を暗号化
+  const encrypted = Buffer.concat([cipher.update(chunk), cipher.final()]);
+
+  // 4. 改ざん検知用の認証タグを取得
+  const authTag = cipher.getAuthTag();
+
+  // 5. nonce + 暗号文 + 認証タグ をくっつけて返す
+  return Buffer.concat([nonce, encrypted, authTag]);
 }
 
 function createWindow() {
@@ -311,6 +329,7 @@ function sendFileData(
   filePath: string,
   requestParams: ProcessingParams,
   config: ServerConfig,
+  clientAesKey: Buffer,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
@@ -327,18 +346,18 @@ function sendFileData(
         mediatypeSize,
         fileSize,
       );
-      socket.write(header);
 
-      socket.write(reqParamsJson, "utf8");
-
-      socket.write(mediatype, "utf8");
+      socket.write(encryptChunk(Buffer.from(header), clientAesKey));
+      socket.write(encryptChunk(Buffer.from(reqParamsJson, "utf8"), clientAesKey));
+      socket.write(encryptChunk(Buffer.from(mediatype, "utf8"), clientAesKey));
 
       const fileStream = fs.createReadStream(filePath, {
         highWaterMark: config.stream_rate,
       });
 
-      fileStream.on("data", (chunk) => {
-        socket.write(chunk);
+      fileStream.on("data", (chunk: Buffer | string) => {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, "utf8");
+        socket.write(encryptChunk(buf, clientAesKey));
       });
 
       fileStream.on("end", () => {
@@ -408,10 +427,10 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
     const clientAesKey = generateAESKey();
     const encryptedAesKey = encryptAESWithRSA(clientAesKey, serverKey);
 
-    // TODO : サーバーとの結合テスト時に以下コメントインして動作確認
-    // await sendEncryptedAESKey(encryptedAesKey,socket);
+    // TODO : サーバーとの結合テスト時に動作確認
+    await sendEncryptedAESKey(encryptedAesKey,socket);
 
-    await sendFileData(socket, request.filePath, request.requestParams, config);
+    await sendFileData(socket, request.filePath, request.requestParams, config, clientAesKey);
 
     const response = await receiveResponse(socket);
 
