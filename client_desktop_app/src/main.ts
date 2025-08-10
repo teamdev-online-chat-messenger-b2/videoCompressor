@@ -27,8 +27,8 @@ interface ServerConfig {
 }
 
 interface KeyPaths {
-  securePrivatePath: string;
-  publicPath: string;
+  secure_private_path: string;
+  client_public_path: string;
 }
 
 function generateCryptoKeys(): void {
@@ -48,7 +48,7 @@ function generateCryptoKeys(): void {
 
   const saveDir = app.getPath("userData");
   const SecurePrivateKeyPath = path.join(saveDir, "key.secure");
-  const PublicKeyPath = path.join(saveDir, "publicKey.pem");
+  const PublicKeyPath = path.join(saveDir, "client_publicKey.pem");
 
   fs.writeFileSync(SecurePrivateKeyPath, encryptedKey);
   fs.writeFileSync(PublicKeyPath, publicKey);
@@ -196,8 +196,8 @@ function createRequestHeader(
 function getKeyPaths(): KeyPaths {
   const saveDir = app.getPath("userData");
   return {
-    securePrivatePath: path.join(saveDir, "key.secure"),
-    publicPath: path.join(saveDir, "publicKey.pem"),
+    secure_private_path: path.join(saveDir, "key.secure"),
+    client_public_path: path.join(saveDir, "client_publicKey.pem"),
   };
 }
 
