@@ -27,8 +27,8 @@ interface ServerConfig {
 }
 
 interface KeyPaths {
-  secure_private_path: string;
-  client_public_path: string;
+  securePrivatePath: string;
+  clientPublicPath: string;
 }
 
 function generateCryptoKeys(): void {
@@ -237,8 +237,8 @@ function createRequestHeader(
 function getKeyPaths(): KeyPaths {
   const saveDir = app.getPath("userData");
   return {
-    secure_private_path: path.join(saveDir, "key.secure"),
-    client_public_path: path.join(saveDir, "client_publicKey.pem"),
+    securePrivatePath: path.join(saveDir, "key.secure"),
+    clientPublicPath: path.join(saveDir, "client_publicKey.pem"),
   };
 }
 
@@ -413,9 +413,9 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
   try {
     socket = await connectToServer(config);
 
-    const { client_public_path } = getKeyPaths();
+    const { clientPublicPath } = getKeyPaths();
 
-    const serverKey = await exchangePublicKeys(socket, client_public_path);
+    const serverKey = await exchangePublicKeys(socket, clientPublicPath);
 
     const clientAesKey = generateAESKey();
     const encryptedAesKey = encryptAESWithRSA(clientAesKey, serverKey);
