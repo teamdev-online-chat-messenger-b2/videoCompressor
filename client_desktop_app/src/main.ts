@@ -368,9 +368,9 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
   try {
     socket = await connectToServer(config);
 
-    const { publicPath } = getKeyPaths();
+    const { client_public_path } = getKeyPaths();
 
-    const serverKey = await exchangePublicKeys(socket, publicPath);
+    const serverKey = await exchangePublicKeys(socket, client_public_path);
 
     await sendFileData(socket, request.filePath, request.requestParams, config);
 
