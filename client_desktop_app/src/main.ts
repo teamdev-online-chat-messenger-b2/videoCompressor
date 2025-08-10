@@ -264,7 +264,10 @@ async function exchangePublicKeys(
     const serverPublicKey = serverKeyBuffer.toString("utf8");
     console.log("サーバーの公開鍵を受信完了");
 
-    console.log("公開鍵の交換に成功");
+    const saveDir = app.getPath("userData");
+    const serverPublicKeyPath = path.join(saveDir, "server_publicKey.pem");
+    fs.writeFileSync(serverPublicKeyPath, serverPublicKey);
+    console.log("サーバーの公開鍵を保存");
 
     return serverPublicKey;
   } catch (error) {
