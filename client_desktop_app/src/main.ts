@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from "crypto";
+import { generateKeyPairSync, randomBytes, publicEncrypt, constants } from "crypto";
 import { app, BrowserWindow, ipcMain, dialog, safeStorage } from "electron";
 import { stat } from "fs/promises";
 import * as path from "path";
@@ -52,6 +52,36 @@ function generateCryptoKeys(): void {
 
   fs.writeFileSync(SecurePrivateKeyPath, encryptedKey);
   fs.writeFileSync(PublicKeyPath, publicKey);
+}
+
+// クライアント用のAES鍵を生成
+function generateAESKey(): Buffer {
+  // AESKeyはデータの暗号化・復号化に使用(今回は動画データの送信のため、AESを使用)
+  const clientAesKey = randomBytes(32);
+  return clientAesKey;
+}
+
+// クライアント用のAES鍵をサーバーの公開鍵で暗号化
+function encryptAESWithRSA(aesKey: Buffer, serverPublicKeyPath:string): Buffer {
+  const serverPublicKey = fs.readFileSync(serverPublicKeyPath, "utf-8");
+  const encryptedAesKey = publicEncrypt(
+    {
+      key: serverPublicKey,
+      padding: constants.RSA_PKCS1_OAEP_PADDING,
+      oaepHash: "sha256",
+    },
+    aesKey
+  );
+  return encryptedAesKey;
+}
+
+// 暗号化したクライアント用のAES鍵をサーバーに送信
+async function sendEncryptedAESKey(encryptedAesKey: Buffer, socket: net.Socket){
+  // はじめの2Byteは文字数、それ以降はencryptedAesKeyをおくる
+  const sizeBuffer = Buffer.alloc(2);
+  sizeBuffer.writeUInt32BE(encryptedAesKey.length, 0);
+  socket.write(sizeBuffer);
+  socket.write(encryptedAesKey);
 }
 
 function createWindow() {
@@ -374,6 +404,12 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
     const { client_public_path } = getKeyPaths();
 
     const serverKey = await exchangePublicKeys(socket, client_public_path);
+
+    const clientAesKey = generateAESKey();
+    const encryptedAesKey = encryptAESWithRSA(clientAesKey, serverKey);
+
+    // TODO : サーバーとの結合テスト時に以下コメントインして動作確認
+    // await sendEncryptedAESKey(encryptedAesKey,socket);
 
     await sendFileData(socket, request.filePath, request.requestParams, config);
 
