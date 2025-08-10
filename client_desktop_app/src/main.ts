@@ -62,23 +62,16 @@ function generateAESKey(): Buffer {
 }
 
 // クライアント用のAES鍵をサーバーの公開鍵で暗号化
-function encryptAESWithRSA(aesKey: Buffer, serverPublicKeyPath:string): Buffer {
-  const serverPublicKey = fs.readFileSync(serverPublicKeyPath, "utf-8");
-  const encryptedAesKey = publicEncrypt(
-    {
-      key: serverPublicKey,
-      padding: constants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: "sha256",
-    },
+function encryptAESWithRSA(aesKey: Buffer, serverPublicKeyPem: string): Buffer {
+  return publicEncrypt(
+    { key: serverPublicKeyPem, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
     aesKey
   );
-  return encryptedAesKey;
 }
 
 // 暗号化したクライアント用のAES鍵をサーバーに送信
 async function sendEncryptedAESKey(encryptedAesKey: Buffer, socket: net.Socket){
-  // はじめの2Byteは文字数、それ以降はencryptedAesKeyをおくる
-  const sizeBuffer = Buffer.alloc(2);
+  const sizeBuffer = Buffer.alloc(4);
   sizeBuffer.writeUInt32BE(encryptedAesKey.length, 0);
   socket.write(sizeBuffer);
   socket.write(encryptedAesKey);
