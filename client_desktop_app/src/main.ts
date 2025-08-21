@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes, publicEncrypt, constants, createCipheriv } from "crypto";
+import { generateKeyPairSync, randomBytes, publicEncrypt, constants, createCipheriv, createDecipheriv } from "crypto";
 import { app, BrowserWindow, ipcMain, dialog, safeStorage } from "electron";
 import { stat } from "fs/promises";
 import * as path from "path";
@@ -93,6 +93,21 @@ function encryptChunk(chunk: Buffer, key: Buffer): Buffer {
 
   // 5. nonce + 暗号文 + 認証タグ をくっつけて返す
   return Buffer.concat([nonce, encrypted, authTag]);
+}
+
+function decryptChunk(encryptedChunk: Buffer, key: Buffer): Buffer {
+  const nonce = encryptedChunk.subarray(0, 12);
+
+  const authTag = encryptedChunk.subarray(-16);
+  
+  const encryptedData = encryptedChunk.subarray(12, -16);
+  
+  const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+  decipher.setAuthTag(authTag);
+  
+  const decryptedChunk = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
+  
+  return decryptedChunk;
 }
 
 function createWindow() {
@@ -366,7 +381,7 @@ function sendFileData(
   });
 }
 
-function receiveResponse(socket: net.Socket): Promise<any> {
+function receiveResponse(socket: net.Socket, clientAesKey: Buffer): Promise<any> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
 
@@ -377,23 +392,51 @@ function receiveResponse(socket: net.Socket): Promise<any> {
     socket.on("end", () => {
       try {
         const buffer = Buffer.concat(chunks);
+        let offset = 0;
+        
+        const encryptedHeaderSize = buffer.readUInt32BE(offset);
+        offset += 4;
+        const encryptedHeader = buffer.subarray(offset, offset + encryptedHeaderSize);
+        offset += encryptedHeaderSize;
+        const decryptedHeader = decryptChunk(encryptedHeader, clientAesKey);
+        const responseCode = decryptedHeader.readUInt8(0);
 
-        const responseCode = buffer.readUIntBE(0, 1);
-        const dataSize = buffer.readUIntBE(1, 4);
+        const encryptedJsonSize = buffer.readUInt32BE(offset);
+        offset += 4;
+        const encryptedJson = buffer.subarray(offset, offset + encryptedJsonSize);
+        offset += encryptedJsonSize;
+        const decryptedJson = decryptChunk(encryptedJson, clientAesKey);
+        const jsonData = JSON.parse(decryptedJson.toString('utf-8'));
 
         if (responseCode === 0x00) {
-          const errorText = buffer.subarray(5, 5 + dataSize).toString("utf-8");
-          resolve({ status: "error", error: errorText });
+          resolve({ status: "error", error: jsonData });
         } else {
-          const jsonData = buffer.subarray(5, 5 + dataSize);
-          const successJson = JSON.parse(jsonData.toString("utf-8"));
-          const fileData = buffer.subarray(5 + dataSize);
+          const decryptedFileChunks: Buffer[] = [];
+          let totalDecryptedSize = 0;
+          
+          while (offset < buffer.length && totalDecryptedSize < jsonData.file_size) {
+            if (offset + 4 > buffer.length) break;
+            
+            const encryptedChunkSize = buffer.readUInt32BE(offset);
+            offset += 4;
+            
+            if (offset + encryptedChunkSize > buffer.length) break;
+            
+            const encryptedChunk = buffer.subarray(offset, offset + encryptedChunkSize);
+            offset += encryptedChunkSize;
+            
+            const decryptedChunk = decryptChunk(encryptedChunk, clientAesKey);
+            decryptedFileChunks.push(decryptedChunk);
+            totalDecryptedSize += decryptedChunk.length;
+          }
+
+          const finalFileData = Buffer.concat(decryptedFileChunks);
 
           resolve({
             status: "success",
-            filename: `output.${successJson.file_extension}`,
-            fileData: Array.from(fileData.subarray(0, successJson.file_size)),
-            fileExtension: successJson.file_extension,
+            filename: `output.${jsonData.file_extension}`,
+            fileData: Array.from(finalFileData),
+            fileExtension: jsonData.file_extension,
           });
         }
       } catch (error) {
@@ -420,12 +463,11 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
     const clientAesKey = generateAESKey();
     const encryptedAesKey = encryptAESWithRSA(clientAesKey, serverKey);
 
-    // TODO : サーバーとの結合テスト時に動作確認
-    await sendEncryptedAESKey(encryptedAesKey,socket);
+    await sendEncryptedAESKey(encryptedAesKey, socket);
 
     await sendFileData(socket, request.filePath, request.requestParams, config, clientAesKey);
 
-    const response = await receiveResponse(socket);
+    const response = await receiveResponse(socket, clientAesKey);
 
     if (response.status === "error") {
       throw new Error(response.error);
