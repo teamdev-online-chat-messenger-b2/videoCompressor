@@ -110,7 +110,7 @@ def decrypt_chunk(encrypted_chunk, aes_key):
         cipher = Cipher(
             algorithms.AES(aes_key),
             modes.GCM(nonce, auth_tag),
-            backend=default_backend
+            backend=default_backend()
         )
 
         decryptor = cipher.decryptor()
@@ -120,8 +120,30 @@ def decrypt_chunk(encrypted_chunk, aes_key):
         return decrypted_data
     
     except Exception as e:
-        print("AES暗号化されたメッセージの解読に失敗：{e}")
+        print(f"AES暗号化されたメッセージの解読に失敗：{e}")
         raise
+
+def encrypt_chunk(chunk, aes_key):
+    try:
+        nonce = os.urandom(12)
+
+        cipher = Cipher(
+            algorithms.AES(aes_key),
+            modes.GCM(nonce),
+            default_backend()
+        )
+        encryptor = cipher.encryptor()
+
+        encrypted_chunk = encryptor.update(chunk) + encryptor.finalize()
+
+        auth_tag = encryptor.tag
+
+        return nonce + encrypted_chunk + auth_tag
+    
+    except Exception as e:
+        print(f"AES暗号化に失敗：{e}")
+        raise
+
 
 def handle_client_request(config, connection):
     client_public_key = exchange_public_keys(connection)
@@ -148,7 +170,7 @@ def handle_client_request(config, connection):
     upload_error = store_uploaded_file_encrypted(config, connection, filename, file_size, aes_key)
 
     if upload_error is not None:
-        return upload_error
+        return upload_error, aes_key
 
     req_data = json.loads(decrypted_req_params)
     action = req_data.get('action', 0)
@@ -160,71 +182,73 @@ def handle_client_request(config, connection):
             try:
                 processed_filename, output_path = compress_video(filename, config['dir_path'])
                 print(f'動画圧縮完了: {processed_filename}')
-                error = send_response(connection, output_path, config['stream_rate'])
+                error = send_encrypted_response(connection, output_path, config['stream_rate'], aes_key)
 
                 if error is not None:
-                    return error
+                    return error, aes_key
             except Exception as process_err:
                 error = ErrorInfo('1002', f'動画圧縮中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
                 print(f"圧縮処理エラー: {str(process_err)}")
-                return error
+                return error, aes_key
         case 2:
             try:
                 processed_filename, output_path = handle_resolution_change(filename, config['dir_path'], req_data)
                 print(f'解像度変更完了: {processed_filename}')
-                error  = send_response(connection, output_path, config['stream_rate'])
+                error  = send_encrypted_response(connection, output_path, config['stream_rate'], aes_key)
 
                 if error is not None:
-                    return error
+                    return error, aes_key
 
             except Exception as process_err:
                 error = ErrorInfo('1003', f'動画処理中のエラー: {str(process_err)}', 'FFMPEGが正しくインストールされているか確認してください。')
                 print(f"解像度処理エラー: {str(process_err)}")
-                return error
+                return error, aes_key
         case 3:
             try:
                 processed_filename, output_path = handle_aspect_change(filename, config['dir_path'], req_data)
                 print(f'アスペクト比変更完了: {processed_filename}')
-                error = send_response(connection, output_path, config['stream_rate'])
+                error = send_encrypted_response(connection, output_path, config['stream_rate'], aes_key)
 
                 if error is not None:
-                    return error
+                    return error, aes_key
 
             except Exception as process_err:
                 error = ErrorInfo('1004', f'動画のアスペクト比変更中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
                 print(f"処理エラー: {str(process_err)}")
-                return error
+                return error, aes_key
         case 4:
             try:
                 processed_filename, output_path = handle_video_conversion(filename, config['dir_path'])
                 print(f'オーディオへの変換完了: {processed_filename}')
-                error  = send_response(connection, output_path, config['stream_rate'])
+                error  = send_encrypted_response(connection, output_path, config['stream_rate'], aes_key)
 
                 if error is not None:
-                    return error
+                    return error, aes_key
 
             except Exception as process_err:
                 error = ErrorInfo('1005', f'オーディオへの変換中のエラー: {str(process_err)}', 'アップロード動画を確認し再度アップロードおよび操作をしてください、解決しない場合は管理者にお問い合わせください。')
                 print(f"オーディオへの変換中のエラー: {str(process_err)}")
-                return error
+                return error, aes_key
         case 5:
                 filepath = os.path.join(config['dir_path'], filename)
                 error = validate_video_duration(filepath,req_data.get('endseconds'))
                 if error != None:
-                    return error
+                    return error, aes_key
                 
                 try:
                     processed_filename,output_path = handle_process_video_clip(filename, config['dir_path'], req_data)
                     print(f'時間範囲での動画を作成完了: {processed_filename}')
-                    send_response(connection, output_path, config['stream_rate'])
+                    send_encrypted_response(connection, output_path, config['stream_rate'], aes_key)
 
                 except Exception as process_err:
                     error = ErrorInfo('1006', f'動画処理中のエラー: {str(process_err)}', 'アップロードした動画を再度確認し、再度トライしてください。')
                     print(f"処理エラー: {str(process_err)}")
-                    return error
+                    return error, aes_key
 
     inputfile_path = os.path.join(config['dir_path'], filename)
     delete_tmp_files([inputfile_path, output_path])
+
+    return None, aes_key
 
 def store_uploaded_file_encrypted(config, connection, filename, original_file_size, aes_key):
     try:
@@ -268,7 +292,7 @@ def store_uploaded_file_encrypted(config, connection, filename, original_file_si
         return error
 
 # レスポンスに関係する関数はここから実装
-def send_response(connection, filepath, stream_rate):
+def send_encrypted_response(connection, filepath, stream_rate, aes_key):
     # 各処理後にプロセス後のデータを含むレスポンスをクライアントに返す関数
     try:
         with open(filepath, 'rb') as f:
@@ -278,12 +302,17 @@ def send_response(connection, filepath, stream_rate):
 
             # サクセスコード：１（１バイト)とファイルサイズ（８バイト）
             success_header = b'\x01'
+            encrypted_header = encrypt_chunk(success_header, aes_key)
+
+            connection.send(len(encrypted_header).to_bytes(4, 'big'))
+            connection.sendall(encrypted_header)
+
             success_json = SuccessInfo(filepath, file_size).to_json()
             success_bytes = success_json.encode('utf-8')
+            encrypted_json = encrypt_chunk(success_bytes, aes_key)
 
-            connection.send(success_header)
-            connection.send(len(success_bytes).to_bytes(4, 'big'))
-            connection.sendall(success_bytes)
+            connection.send(len(encrypted_json).to_bytes(4, 'big'))
+            connection.sendall(encrypted_json)
 
             print(f"処理済みファイル（{file_size}バイト）を送信中")
 
@@ -293,7 +322,12 @@ def send_response(connection, filepath, stream_rate):
                 data = f.read(stream_rate)
                 if not data:
                     break
-                connection.send(data)
+
+                encrypted_chunk = encrypt_chunk(data, aes_key)
+
+                connection.send(len(encrypted_chunk).to_bytes(4, 'big'))
+                connection.send(encrypted_chunk)
+
                 total_sent += len(data)
 
             print("処理済みファイルの送信完了")
@@ -303,22 +337,25 @@ def send_response(connection, filepath, stream_rate):
         print(f"ファイル送信エラー: {str(error)}")
         return ErrorInfo('1004', f'ファイル送信エラー: {str(error)}', 'ネットワーク接続を確認してください。')
 
-def send_error_response(connection, error_info):
+def send_encrypted_error_response(connection, error_info, aes_key):
     # エラーレスポンスをクライアントに返す関数
     try:
-        # エラーコード：０（１バイト）とエラーJSON（ErrorInfoオブジェクト）
+        # エラーコード：０（１バイト）とエラーJSON（ErrorInfoオブジェクト）を共にAES暗号化し、データサイズとデータを送信
         error_header = b'\x00'
+        encrypted_header = encrypt_chunk(error_header, aes_key)
+        connection.send(len(encrypted_header).to_bytes(4, 'big'))
+        connection.sendall(encrypted_header)
+
         error_json = error_info.to_json()
         error_bytes = error_json.encode('utf-8')
+        encrypted_json = encrypt_chunk(error_bytes, aes_key)
+        connection.send(len(encrypted_json).to_bytes(4, 'big'))
+        connection.sendall(encrypted_json)
 
-        connection.send(error_header)
-        connection.send(len(error_bytes).to_bytes(4, 'big'))
-        connection.sendall(error_bytes)
-
-        print(f"エラーレスポンス送信: {error_info.error_code}")
+        print(f"暗号化されたエラーレスポンス送信: {error_info.error_code}")
 
     except Exception as error:
-        print(f"エラーレスポンス送信失敗: {str(error)}")
+        print(f"暗号化エラーレスポンス送信失敗: {str(error)}")
 
 # その他必要な関数はここから実装
 def load_server_config():
@@ -557,9 +594,10 @@ def main():
         print(f'{client_address}と接続しました。')
 
         error = None
+        aes_key = None
 
         try:
-            error = handle_client_request(config, connection)
+            error, aes_key = handle_client_request(config, connection)
 
         except Exception as e:
             error = ErrorInfo('1002', str(e), '解決しない場合は管理者にお問い合わせください。')
@@ -567,7 +605,10 @@ def main():
         finally:
             if error is not None:
                 print(error.to_json())
-                send_error_response(connection, error)
+                if aes_key is not None:
+                    send_encrypted_error_response(connection, error, aes_key)
+                else:
+                    print("AES鍵が利用できないため、暗号化されていないエラーレスポンスを送信できません")
 
             print('コネクションを閉じます')
             connection.close()
