@@ -78,3 +78,6 @@ jspm_packages/
 # dotenv environment variables file
 .env
 
+# encrypt
+*.pem
+*.secure 
