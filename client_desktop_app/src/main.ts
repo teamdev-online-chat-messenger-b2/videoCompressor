@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from "crypto";
+import { generateKeyPairSync, randomBytes, publicEncrypt, constants, createCipheriv, createDecipheriv } from "crypto";
 import { app, BrowserWindow, ipcMain, dialog, safeStorage } from "electron";
 import { stat } from "fs/promises";
 import * as path from "path";
@@ -28,7 +28,7 @@ interface ServerConfig {
 
 interface KeyPaths {
   securePrivatePath: string;
-  publicPath: string;
+  clientPublicPath: string;
 }
 
 function generateCryptoKeys(): void {
@@ -48,10 +48,66 @@ function generateCryptoKeys(): void {
 
   const saveDir = app.getPath("userData");
   const SecurePrivateKeyPath = path.join(saveDir, "key.secure");
-  const PublicKeyPath = path.join(saveDir, "publicKey.pem");
+  const PublicKeyPath = path.join(saveDir, "client_publicKey.pem");
 
   fs.writeFileSync(SecurePrivateKeyPath, encryptedKey);
   fs.writeFileSync(PublicKeyPath, publicKey);
+}
+
+// クライアント用のAES鍵を生成
+function generateAESKey(): Buffer {
+  // AESKeyはデータの暗号化・復号化に使用(今回は動画データの送信のため、AESを使用)
+  const clientAesKey = randomBytes(32);
+  return clientAesKey;
+}
+
+// クライアント用のAES鍵をサーバーの公開鍵で暗号化
+function encryptAESWithRSA(aesKey: Buffer, serverPublicKeyPem: string): Buffer {
+  return publicEncrypt(
+    { key: serverPublicKeyPem, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
+    aesKey
+  );
+}
+
+// 暗号化したクライアント用のAES鍵をサーバーに送信
+async function sendEncryptedAESKey(encryptedAesKey: Buffer, socket: net.Socket){
+  const sizeBuffer = Buffer.alloc(4);
+  sizeBuffer.writeUInt32BE(encryptedAesKey.length, 0);
+  socket.write(sizeBuffer);
+  socket.write(encryptedAesKey);
+}
+
+// データを暗号化
+function encryptChunk(chunk: Buffer, key: Buffer): Buffer {
+  // 1. 12バイトのランダムなnonce（ナンス）を作成
+  const nonce = randomBytes(12);
+
+  // 2. AES-256-GCMで暗号化器を作成
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+
+  // 3. 入力されたデータ（chunk）を暗号化
+  const encrypted = Buffer.concat([cipher.update(chunk), cipher.final()]);
+
+  // 4. 改ざん検知用の認証タグを取得
+  const authTag = cipher.getAuthTag();
+
+  // 5. nonce + 暗号文 + 認証タグ をくっつけて返す
+  return Buffer.concat([nonce, encrypted, authTag]);
+}
+
+function decryptChunk(encryptedChunk: Buffer, key: Buffer): Buffer {
+  const nonce = encryptedChunk.subarray(0, 12);
+
+  const authTag = encryptedChunk.subarray(-16);
+  
+  const encryptedData = encryptedChunk.subarray(12, -16);
+  
+  const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+  decipher.setAuthTag(authTag);
+  
+  const decryptedChunk = Buffer.concat([decipher.update(encryptedData), decipher.final()]);
+  
+  return decryptedChunk;
 }
 
 function createWindow() {
@@ -197,7 +253,7 @@ function getKeyPaths(): KeyPaths {
   const saveDir = app.getPath("userData");
   return {
     securePrivatePath: path.join(saveDir, "key.secure"),
-    publicPath: path.join(saveDir, "publicKey.pem"),
+    clientPublicPath: path.join(saveDir, "client_publicKey.pem"),
   };
 }
 
@@ -264,7 +320,10 @@ async function exchangePublicKeys(
     const serverPublicKey = serverKeyBuffer.toString("utf8");
     console.log("サーバーの公開鍵を受信完了");
 
-    console.log("公開鍵の交換に成功");
+    const saveDir = app.getPath("userData");
+    const serverPublicKeyPath = path.join(saveDir, "server_publicKey.pem");
+    fs.writeFileSync(serverPublicKeyPath, serverPublicKey);
+    console.log("サーバーの公開鍵を保存");
 
     return serverPublicKey;
   } catch (error) {
@@ -278,6 +337,7 @@ function sendFileData(
   filePath: string,
   requestParams: ProcessingParams,
   config: ServerConfig,
+  clientAesKey: Buffer,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
@@ -294,18 +354,18 @@ function sendFileData(
         mediatypeSize,
         fileSize,
       );
-      socket.write(header);
 
-      socket.write(reqParamsJson, "utf8");
-
-      socket.write(mediatype, "utf8");
+      socket.write(encryptChunk(Buffer.from(header), clientAesKey));
+      socket.write(encryptChunk(Buffer.from(reqParamsJson, "utf8"), clientAesKey));
+      socket.write(encryptChunk(Buffer.from(mediatype, "utf8"), clientAesKey));
 
       const fileStream = fs.createReadStream(filePath, {
         highWaterMark: config.stream_rate,
       });
 
-      fileStream.on("data", (chunk) => {
-        socket.write(chunk);
+      fileStream.on("data", (chunk: Buffer | string) => {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, "utf8");
+        socket.write(encryptChunk(buf, clientAesKey));
       });
 
       fileStream.on("end", () => {
@@ -321,7 +381,7 @@ function sendFileData(
   });
 }
 
-function receiveResponse(socket: net.Socket): Promise<any> {
+function receiveResponse(socket: net.Socket, clientAesKey: Buffer): Promise<any> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
 
@@ -332,23 +392,51 @@ function receiveResponse(socket: net.Socket): Promise<any> {
     socket.on("end", () => {
       try {
         const buffer = Buffer.concat(chunks);
+        let offset = 0;
+        
+        const encryptedHeaderSize = buffer.readUInt32BE(offset);
+        offset += 4;
+        const encryptedHeader = buffer.subarray(offset, offset + encryptedHeaderSize);
+        offset += encryptedHeaderSize;
+        const decryptedHeader = decryptChunk(encryptedHeader, clientAesKey);
+        const responseCode = decryptedHeader.readUInt8(0);
 
-        const responseCode = buffer.readUIntBE(0, 1);
-        const dataSize = buffer.readUIntBE(1, 4);
+        const encryptedJsonSize = buffer.readUInt32BE(offset);
+        offset += 4;
+        const encryptedJson = buffer.subarray(offset, offset + encryptedJsonSize);
+        offset += encryptedJsonSize;
+        const decryptedJson = decryptChunk(encryptedJson, clientAesKey);
+        const jsonData = JSON.parse(decryptedJson.toString('utf-8'));
 
         if (responseCode === 0x00) {
-          const errorText = buffer.subarray(5, 5 + dataSize).toString("utf-8");
-          resolve({ status: "error", error: errorText });
+          resolve({ status: "error", error: jsonData });
         } else {
-          const jsonData = buffer.subarray(5, 5 + dataSize);
-          const successJson = JSON.parse(jsonData.toString("utf-8"));
-          const fileData = buffer.subarray(5 + dataSize);
+          const decryptedFileChunks: Buffer[] = [];
+          let totalDecryptedSize = 0;
+          
+          while (offset < buffer.length && totalDecryptedSize < jsonData.file_size) {
+            if (offset + 4 > buffer.length) break;
+            
+            const encryptedChunkSize = buffer.readUInt32BE(offset);
+            offset += 4;
+            
+            if (offset + encryptedChunkSize > buffer.length) break;
+            
+            const encryptedChunk = buffer.subarray(offset, offset + encryptedChunkSize);
+            offset += encryptedChunkSize;
+            
+            const decryptedChunk = decryptChunk(encryptedChunk, clientAesKey);
+            decryptedFileChunks.push(decryptedChunk);
+            totalDecryptedSize += decryptedChunk.length;
+          }
+
+          const finalFileData = Buffer.concat(decryptedFileChunks);
 
           resolve({
             status: "success",
-            filename: `output.${successJson.file_extension}`,
-            fileData: Array.from(fileData.subarray(0, successJson.file_size)),
-            fileExtension: successJson.file_extension,
+            filename: `output.${jsonData.file_extension}`,
+            fileData: Array.from(finalFileData),
+            fileExtension: jsonData.file_extension,
           });
         }
       } catch (error) {
@@ -368,13 +456,18 @@ async function processVideoRequest(request: ProcessingRequest): Promise<any> {
   try {
     socket = await connectToServer(config);
 
-    const { publicPath } = getKeyPaths();
+    const { clientPublicPath } = getKeyPaths();
 
-    const serverKey = await exchangePublicKeys(socket, publicPath);
+    const serverKey = await exchangePublicKeys(socket, clientPublicPath);
 
-    await sendFileData(socket, request.filePath, request.requestParams, config);
+    const clientAesKey = generateAESKey();
+    const encryptedAesKey = encryptAESWithRSA(clientAesKey, serverKey);
 
-    const response = await receiveResponse(socket);
+    await sendEncryptedAESKey(encryptedAesKey, socket);
+
+    await sendFileData(socket, request.filePath, request.requestParams, config, clientAesKey);
+
+    const response = await receiveResponse(socket, clientAesKey);
 
     if (response.status === "error") {
       throw new Error(response.error);
